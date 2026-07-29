@@ -28,6 +28,7 @@ def _selector(user: User) -> RunsSelector:
 
 
 async def test_runs_selector_renders(user: User, fake_agent) -> None:
+    fake_agent.tokened = False
     await user.open("/runs")
     await user.should_see(kind=RunsSelector)
     await user.should_see(kind=OncatLogin)
@@ -51,15 +52,15 @@ async def test_runs_selector_load_populates_table(user: User, fake_agent) -> Non
     await user.open("/runs")
     selector = _selector(user)
     table = selector.table
-    table._agent.run_result = [SAMPLE_RUN]
+    fake_agent.run_result = [SAMPLE_RUN]
     table._input.value = "24703"
 
     await table._on_load()
 
     # The IPTS number was normalized and the fixed facility/instrument were sent.
-    assert table._agent.run_kwargs["experiment"] == "IPTS-24703"
-    assert table._agent.run_kwargs["facility"] == "SNS"
-    assert table._agent.run_kwargs["instrument"] == "USANS"
+    assert fake_agent.run_kwargs["experiment"] == "IPTS-24703"
+    assert fake_agent.run_kwargs["facility"] == "SNS"
+    assert fake_agent.run_kwargs["instrument"] == "USANS"
     # The child RunTable carries the mapped row.
     assert table._table.options["rowData"] == [
         {
@@ -72,6 +73,7 @@ async def test_runs_selector_load_populates_table(user: User, fake_agent) -> Non
 
 
 async def test_runs_selector_on_connection_change_is_forwarded(user: User, fake_agent) -> None:
+    fake_agent.tokened = False
     await user.open("/runs")
     selector = _selector(user)
     seen: list[bool] = []

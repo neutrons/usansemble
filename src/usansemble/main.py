@@ -10,12 +10,12 @@ import argparse
 import argcomplete
 from nicegui import ui
 
-# Registers the ``@ui.page`` routes as a side effect of import.
-from usansemble import app  # noqa: F401
-
 # pyoncatng owns the ONCat login configuration; ensure its config file exists and
 # carries the latest [login.oncat] defaults so the login widget finds a client ID.
 from pyoncatng.configuration import Configuration
+
+# Registers the ``@ui.page`` routes as a side effect of import.
+from usansemble import app  # noqa: F401
 
 # Dev-only secret so ``app.storage.user`` (per-browser token persistence) works
 # out of the box. For any real deployment pass your own via --storage-secret.

@@ -11,9 +11,11 @@ keywords = ["neutrons", "usans", "usansred", "oncat", "nicegui"]
 readme = "README.md"
 
 dependencies = [
-  # Dependencies available from both PyPI and conda should be listed here.
-  # pyoncatng brings in its own ONCat stack (pyoncat, oauthlib, ...) transitively.
-  "pyoncatng",
+  # PyPI-installable runtime dependencies only. pyoncatng is a conda-only package
+  # (not published to PyPI), so it is declared in the conda tables below
+  # ([tool.pixi.dependencies] and [tool.pixi.package.run-dependencies]) rather than
+  # here -- listing it here would make the editable install resolve it from PyPI and
+  # fail. pyoncatng brings in its own ONCat stack (pyoncat, oauthlib, ...) transitively.
   "nicegui",
   "argcomplete",
 ]

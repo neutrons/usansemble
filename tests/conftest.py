@@ -7,10 +7,9 @@ under test lives in the ``pyoncatng`` package; the fixtures patch it there.
 
 import os
 
+import pyoncatng.configuration as configuration
 import pytest
 from fakes import FakeAgent
-
-import pyoncatng.configuration as configuration
 
 TEST_CONFIG = os.path.join(os.path.dirname(__file__), "data", "configuration.ini")
 
