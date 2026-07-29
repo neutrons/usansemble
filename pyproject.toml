@@ -10,19 +10,6 @@ license = { text = "GPL-3.0" }
 keywords = ["neutrons", "usans", "usansred", "oncat", "nicegui"]
 readme = "README.md"
 
-dependencies = [
-  # PyPI-installable runtime dependencies only. pyoncatng is a conda-only package
-  # (not published to PyPI), so it is declared in the conda tables below
-  # ([tool.pixi.dependencies] and [tool.pixi.package.run-dependencies]) rather than
-  # here -- listing it here would make the editable install resolve it from PyPI and
-  # fail. pyoncatng brings in its own ONCat stack (pyoncat, oauthlib, ...) transitively.
-  "nicegui",
-  "argcomplete",
-]
-
-[project.optional-dependencies]
-docs = ["sphinx", "sphinx_rtd_theme", "versioningit", "myst_parser"]
-
 [project.scripts]
 usansemble = "usansemble.main:main"
 
@@ -92,15 +79,13 @@ channels = [
 platforms = ["linux-64", "osx-arm64"] # add additional platforms as needed
 
 ## Dependency tables - https://pixi.sh/latest/reference/pixi_manifest/#the-dependencies-tables
-## These tables override the dependencies listed in the [project] section
+## Pixi is the source of truth for project dependencies.
 
 [tool.pixi.dependencies]
 # Conda package dependencies
-# pyoncatng widgets (brings pyoncat + ONCat auth stack transitively)
+python = ">=3.10"
 pyoncatng = "*"
-# GUI
 nicegui = "*"
-# CLI shell completion
 argcomplete = "*"
 # Security-hardening version pins (CVE mitigations)
 h2 = ">=4.3.0"               # Known vulnerability in <4.3.0
