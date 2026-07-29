@@ -1,0 +1,84 @@
+"""Tests for the RunsSelector composite widget.
+
+``RunsSelector`` packages pyoncatng's ``OncatLogin`` + ``IPTSTable``. The tests
+use NiceGUI's in-process ``user`` simulation; the ``fake_agent`` fixture patches
+``pyoncatng.core.service.build_agent`` so the login card (and the table it feeds)
+run against a scriptable agent. A test reaches the live element through
+``user.find`` and scripts ``Run.list`` before loading.
+"""
+
+from nicegui.testing import User
+from pyoncatng.widgets.iptstable import IPTSTable
+from pyoncatng.widgets.login import OncatLogin
+
+from usansemble.widgets.runs_selector import RunsSelector
+
+# A sample run as returned by ONCat with a flat, dot-path projection. USANS runs
+# expose metadata under datafiles.raw.metadata.entry.*.
+SAMPLE_RUN = {
+    "id": 33221,
+    "datafiles.raw.metadata.entry.title": "Align:0 stop rheometer",
+    "datafiles.raw.metadata.entry.start_time": "2020-11-24T06:33:53.879457667-05:00",
+    "datafiles.raw.metadata.entry.total_counts": 258881,
+}
+
+
+def _selector(user: User) -> RunsSelector:
+    return next(iter(user.find(RunsSelector).elements))
+
+
+async def test_runs_selector_renders(user: User, fake_agent) -> None:
+    await user.open("/runs")
+    await user.should_see(kind=RunsSelector)
+    await user.should_see(kind=OncatLogin)
+    await user.should_see(kind=IPTSTable)
+    await user.should_see("IPTS:")
+    await user.should_see("Load")
+    await user.should_see("Connect")
+
+
+async def test_runs_selector_exposes_login_and_table(user: User, fake_agent) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+    assert isinstance(selector.login, OncatLogin)
+    assert isinstance(selector.table, IPTSTable)
+    # The table shares the login's agent; both are the injected fake.
+    assert selector.agent is selector.login.agent
+    assert selector.table._agent is fake_agent
+
+
+async def test_runs_selector_load_populates_table(user: User, fake_agent) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+    table = selector.table
+    table._agent.run_result = [SAMPLE_RUN]
+    table._input.value = "24703"
+
+    await table._on_load()
+
+    # The IPTS number was normalized and the fixed facility/instrument were sent.
+    assert table._agent.run_kwargs["experiment"] == "IPTS-24703"
+    assert table._agent.run_kwargs["facility"] == "SNS"
+    assert table._agent.run_kwargs["instrument"] == "USANS"
+    # The child RunTable carries the mapped row.
+    assert table._table.options["rowData"] == [
+        {
+            "ID": 33221,
+            "Title": "Align:0 stop rheometer",
+            "Start Time": "2020-11-24T06:33:53.879457667-05:00",
+            "Total Counts": 258881,
+        }
+    ]
+
+
+async def test_runs_selector_on_connection_change_is_forwarded(user: User, fake_agent) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+    seen: list[bool] = []
+    selector.on_connection_change(seen.append)
+
+    # Firing the login's state notification reaches callbacks registered on the
+    # composite widget (the pass-through contract).
+    selector.login._update_connection_status()
+
+    assert seen == [selector.login.is_connected]
