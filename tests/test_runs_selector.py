@@ -11,7 +11,7 @@ from nicegui.testing import User
 from pyoncatng.widgets.iptstable import IPTSTable
 from pyoncatng.widgets.login import OncatLogin
 
-from usansemble.widgets.runs_selector import RunsSelector
+from usansemble.widgets.runs_selector import PROCESSING_VARIABLES, RunsSelector
 
 # A sample run as returned by ONCat with a flat, dot-path projection. USANS runs
 # expose metadata under datafiles.raw.metadata.entry.*.
@@ -46,6 +46,7 @@ async def test_runs_selector_exposes_login_and_table(user: User, fake_agent) -> 
     # The table shares the login's agent; both are the injected fake.
     assert selector.agent is selector.login.agent
     assert selector.table._agent is fake_agent
+    assert selector.table._processing_variables == list(PROCESSING_VARIABLES)
 
 
 async def test_runs_selector_load_populates_table(user: User, fake_agent) -> None:
