@@ -7,11 +7,15 @@ The user signs in, types an IPTS number, and the table fills with that
 experiment's runs for a fixed facility/instrument (USANS by default).
 
 It is the first building block of usansemble: later steps of the config-assembly
-flow consume the authenticated agent and (eventually) the selected runs exposed
-here. Row *selection* is not yet part of ``IPTSTable``, so this version displays
-the runs; a selection accessor will be added when that capability lands upstream.
+flow consume the authenticated agent and the runs selected here. The selection
+itself is read through ``IPTSTable`` (``selected_rows()`` /
+``on_selection_change()``); on top of AG Grid's stock click gestures
+(click/Ctrl+click/Shift+click) this widget adds a **double-click** that selects
+every run sharing the double-clicked run's title, since the runs of one USANS
+measurement share a title -- see :data:`_SELECT_BY_TITLE_JS`.
 """
 
+import json
 from typing import Callable, Optional
 
 from nicegui import ui
@@ -24,6 +28,31 @@ PROCESSING_VARIABLES = (
     ("Start Time", "datafiles.raw.metadata.entry.start_time"),
     ("Total Counts", "datafiles.raw.metadata.entry.total_counts"),
 )
+
+# The column whose value groups the runs of one measurement. In ``IPTSTable`` the
+# column name is also the header label and the row-dict key, so this is the field
+# to match on in the grid's row data.
+TITLE_COLUMN = PROCESSING_VARIABLES[0][0]
+
+# Client-side AG Grid ``onCellDoubleClicked`` handler: double-clicking a cell
+# selects every row sharing that row's title, replacing the previous selection;
+# holding Ctrl (or Cmd on macOS) unions the matches into the previous selection
+# instead. It has to run in the browser because NiceGUI's AG Grid event payload
+# drops the underlying MouseEvent, so the server never sees the Ctrl modifier.
+# NiceGUI turns an options key prefixed with ":" into a real JS function.
+_SELECT_BY_TITLE_JS = f"""
+(params) => {{
+    const field = {json.dumps(TITLE_COLUMN)};
+    const wanted = params.data ? params.data[field] : undefined;
+    const additive = !!(params.event && (params.event.ctrlKey || params.event.metaKey));
+    const nodes = [];
+    params.api.forEachNode((node) => {{
+        if (node.data && node.data[field] === wanted) nodes.push(node);
+    }});
+    if (!additive) params.api.deselectAll();
+    params.api.setNodesSelected({{ nodes: nodes, newValue: true, source: "api" }});
+}}
+"""
 
 
 class RunsSelector(ui.column):
@@ -121,3 +150,17 @@ class RunsSelector(ui.column):
                 .classes("w-full")
                 .style(f"height: {self._table_height}")
             )
+            self._enable_title_double_click()
+
+    def _enable_title_double_click(self) -> None:
+        """Make a double-click select every row sharing the clicked row's title.
+
+        The gesture is a property of the AG Grid options, so it can be installed
+        on the ``IPTSTable`` instance without subclassing it. ``IPTSTable`` keeps
+        the grid private, hence the reach into ``_table``; should pyoncatng grow a
+        public hook for this, only this method needs to change.
+        """
+        grid = self._table._table
+        grid.options[":onCellDoubleClicked"] = _SELECT_BY_TITLE_JS
+        # Push the new option in case the widget is built after the client connected.
+        grid.update()

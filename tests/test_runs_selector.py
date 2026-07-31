@@ -7,11 +7,14 @@ run against a scriptable agent. A test reaches the live element through
 ``user.find`` and scripts ``Run.list`` before loading.
 """
 
+import json
+
+import pytest
 from nicegui.testing import User
 from pyoncatng.widgets.iptstable import IPTSTable
 from pyoncatng.widgets.login import OncatLogin
 
-from usansemble.widgets.runs_selector import PROCESSING_VARIABLES, RunsSelector
+from usansemble.widgets.runs_selector import PROCESSING_VARIABLES, TITLE_COLUMN, RunsSelector
 
 # A sample run as returned by ONCat with a flat, dot-path projection. USANS runs
 # expose metadata under datafiles.raw.metadata.entry.*.
@@ -71,6 +74,34 @@ async def test_runs_selector_load_populates_table(user: User, fake_agent) -> Non
             "Total Counts": 258881,
         }
     ]
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_runs_selector_installs_title_double_click_handler(user: User) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+
+    # The handler is a client-side AG Grid option (NiceGUI compiles a ":"-prefixed
+    # key into a JS function), so only its presence and shape can be checked here.
+    handler = selector.table._table.options[":onCellDoubleClicked"]
+    assert "onCellDoubleClicked" not in selector.table._table.options
+    # Ctrl (and Cmd on macOS) switches from replacing to appending to the selection.
+    assert "ctrlKey" in handler
+    assert "metaKey" in handler
+    # Replacing clears first; both branches end by selecting the matching rows.
+    assert "deselectAll" in handler
+    assert "setNodesSelected" in handler
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_title_double_click_handler_targets_the_title_column(user: User) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+
+    # Guards against a PROCESSING_VARIABLES reorder silently pointing the gesture
+    # at the wrong column.
+    assert TITLE_COLUMN == "Title"
+    assert json.dumps(TITLE_COLUMN) in selector.table._table.options[":onCellDoubleClicked"]
 
 
 async def test_runs_selector_on_connection_change_is_forwarded(user: User, fake_agent) -> None:
