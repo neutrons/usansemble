@@ -55,12 +55,13 @@ _SELECT_BY_TITLE_JS = f"""
 """
 
 # Gesture cheat-sheet captioning the table. The single-click gestures come from AG
-# Grid's multi-row selection, the double-click ones from _SELECT_BY_TITLE_JS. Kept
-# to "Ctrl" for brevity; the handler also accepts Cmd, so macOS users are covered.
+# Grid's multi-row selection, the double-click ones from _SELECT_BY_TITLE_JS. Both
+# additive gestures name Ctrl *and* Cmd: the handler accepts metaKey and AG Grid
+# treats Cmd as Ctrl on macOS, so Mac users should see the gesture documented.
 SELECTION_HELP = (
-    "Click selects a run · Ctrl+click toggles · Shift+click selects a range · "
+    "Click selects a run · Ctrl/Cmd+click toggles · Shift+click selects a range · "
     "Double-click selects every run with the same title · "
-    "Ctrl+double-click adds them to the selection"
+    "Ctrl/Cmd+double-click adds them to the selection"
 )
 
 
