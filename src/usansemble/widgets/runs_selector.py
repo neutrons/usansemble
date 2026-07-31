@@ -54,6 +54,15 @@ _SELECT_BY_TITLE_JS = f"""
 }}
 """
 
+# Gesture cheat-sheet captioning the table. The single-click gestures come from AG
+# Grid's multi-row selection, the double-click ones from _SELECT_BY_TITLE_JS. Kept
+# to "Ctrl" for brevity; the handler also accepts Cmd, so macOS users are covered.
+SELECTION_HELP = (
+    "Click selects a run · Ctrl+click toggles · Shift+click selects a range · "
+    "Double-click selects every run with the same title · "
+    "Ctrl+double-click adds them to the selection"
+)
+
 
 class RunsSelector(ui.column):
     """An ``OncatLogin`` card above an ``IPTSTable``, packaged as one widget.
@@ -151,6 +160,7 @@ class RunsSelector(ui.column):
                 .style(f"height: {self._table_height}")
             )
             self._enable_title_double_click()
+            self._add_selection_help()
 
     def _enable_title_double_click(self) -> None:
         """Make a double-click select every row sharing the clicked row's title.
@@ -164,3 +174,13 @@ class RunsSelector(ui.column):
         grid.options[":onCellDoubleClicked"] = _SELECT_BY_TITLE_JS
         # Push the new option in case the widget is built after the client connected.
         grid.update()
+
+    def _add_selection_help(self) -> None:
+        """Caption the table with the click gestures it supports.
+
+        ``IPTSTable`` is a ``ui.card`` and NiceGUI elements are re-enterable
+        context managers, so this appends the caption as the card's last child --
+        below the table, inside the card.
+        """
+        with self._table:
+            self._selection_help = ui.label(SELECTION_HELP).classes("text-xs text-gray-500")

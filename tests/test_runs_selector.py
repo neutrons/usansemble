@@ -14,7 +14,7 @@ from nicegui.testing import User
 from pyoncatng.widgets.iptstable import IPTSTable
 from pyoncatng.widgets.login import OncatLogin
 
-from usansemble.widgets.runs_selector import PROCESSING_VARIABLES, TITLE_COLUMN, RunsSelector
+from usansemble.widgets.runs_selector import PROCESSING_VARIABLES, SELECTION_HELP, TITLE_COLUMN, RunsSelector
 
 # A sample run as returned by ONCat with a flat, dot-path projection. USANS runs
 # expose metadata under datafiles.raw.metadata.entry.*.
@@ -102,6 +102,17 @@ async def test_title_double_click_handler_targets_the_title_column(user: User) -
     # at the wrong column.
     assert TITLE_COLUMN == "Title"
     assert json.dumps(TITLE_COLUMN) in selector.table._table.options[":onCellDoubleClicked"]
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_runs_selector_shows_selection_help(user: User) -> None:
+    await user.open("/runs")
+    await user.should_see(SELECTION_HELP)
+
+    # The caption belongs to the table card, so it stays with the table if the
+    # surrounding layout changes.
+    selector = _selector(user)
+    assert selector._selection_help.parent_slot.parent is selector.table
 
 
 async def test_runs_selector_on_connection_change_is_forwarded(user: User, fake_agent) -> None:
