@@ -19,6 +19,12 @@ from pyoncatng.configuration import get_data
 from pyoncatng.widgets.iptstable import IPTSTable
 from pyoncatng.widgets.login import OncatLogin
 
+PROCESSING_VARIABLES = (
+    ("Title", "datafiles.raw.metadata.entry.title"),
+    ("Start Time", "datafiles.raw.metadata.entry.start_time"),
+    ("Total Counts", "datafiles.raw.metadata.entry.total_counts"),
+)
+
 
 class RunsSelector(ui.column):
     """An ``OncatLogin`` card above an ``IPTSTable``, packaged as one widget.
@@ -110,6 +116,7 @@ class RunsSelector(ui.column):
                     agent=self._login.agent,
                     facility=self._facility,
                     instrument=self._instrument,
+                    processing_variables=PROCESSING_VARIABLES,
                 )
                 .classes("w-full")
                 .style(f"height: {self._table_height}")
