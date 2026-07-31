@@ -72,7 +72,7 @@ file = "src/usansemble/_version.py"
 preview = ["pixi-build"] # Required until the build feature becomes stable
 channels = [
   "conda-forge",
-  "neutrons/label/dev",                     # hosts the pyoncatng dev builds
+  "neutrons/label/rc",                      # hosts the pyoncatng rc builds
   "oncat",                                  # hosts the pyoncat package (pulled in by pyoncatng)
   "https://prefix.dev/pixi-build-backends", # Required for pixi build
 ]
