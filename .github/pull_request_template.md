@@ -1,7 +1,12 @@
 # Description of the changes
 
 
-Check all that apply:
+### References:
+
+- Links to IBM EWM items:
+- Links to related issues or pull requests:
+
+# Check all that apply:
 
 - [ ] Updated documentation
 - [ ] Source added/refactored
@@ -9,10 +14,6 @@ Check all that apply:
 - [ ] Added widget/UI tests
 - [ ] Updated packaging, dependency, or Pixi configuration
 
-**References:**
-
-- Links to IBM EWM items:
-- Links to related issues or pull requests:
 
 # Manual test for the reviewer
 
