@@ -44,6 +44,7 @@ _SELECT_BY_TITLE_JS = f"""
 (params) => {{
     const field = {json.dumps(TITLE_COLUMN)};
     const wanted = params.data ? params.data[field] : undefined;
+    if (wanted == null) return;
     const additive = !!(params.event && (params.event.ctrlKey || params.event.metaKey));
     const nodes = [];
     params.api.forEachNode((node) => {{

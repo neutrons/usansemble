@@ -88,6 +88,8 @@ async def test_runs_selector_installs_title_double_click_handler(user: User) -> 
     # Ctrl (and Cmd on macOS) switches from replacing to appending to the selection.
     assert "ctrlKey" in handler
     assert "metaKey" in handler
+    # Invalid cell events must leave the existing selection unchanged.
+    assert "if (wanted == null) return;" in handler
     # Replacing clears first; both branches end by selecting the matching rows.
     assert "deselectAll" in handler
     assert "setNodesSelected" in handler
