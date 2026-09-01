@@ -11,7 +11,7 @@
 - [ ] Updated documentation
 - [ ] Source added/refactored
 - [ ] Unit tests added/refactored
-- [ ] Widget/UI tests added/refactored
+- [x] Widget/UI tests added/refactored
 - [ ] Updated packaging, dependency, or Pixi configuration
 
 

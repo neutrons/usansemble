@@ -298,13 +298,15 @@ async def test_fetch_runs_without_a_selection_keeps_the_previous_runs(user: User
     _stub_selection(selector, [_row(33221)])
     await selector._on_fetch()
 
-    # The button guards against this, but a Load that drops the selection may
+    # The buttons guard against this, but a Load that drops the selection may
     # not fire selectionChanged, so an empty fetch must not discard the runs.
     _stub_selection(selector, [])
     await selector._on_fetch()
 
     assert [row[ID_COLUMN] for row in selector.fetched_runs] == [33221]
+    # Both buttons reflect the corrected state, not just the one that was clicked.
     assert selector._fetch_button.enabled is False
+    assert selector._clear_button.enabled is False
     await user.should_see(NO_SELECTION_MESSAGE)
 
 

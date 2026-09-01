@@ -94,7 +94,8 @@ def _copy_rows(rows: List[Row]) -> List[Row]:
     row holds whatever the ONCat projection returned (``IPTSTable.rows_from_runs``
     copies ``run.get(path)`` verbatim), and a metadata path may yield a list or a
     nested dict. Copying in depth keeps the boundary intact whatever the columns
-    are configured to fetch.
+    are configured to fetch. It is the same boundary pyoncatng's ``RunTable``
+    draws around its own rows, in depth rather than one level.
     """
     return copy.deepcopy(list(rows))
 
@@ -174,9 +175,9 @@ class RunsSelector(ui.column):
         the last capture in place, so it stays available to the later steps of
         the config-assembly flow until the user fetches again.
 
-        Deep copies of the stored rows, so a consumer cannot mutate the captured
-        selection -- the same boundary ``RunTable`` draws around its own rows.
-        Empty until the button is first clicked with a selection.
+        Deep copies of the stored rows, so mutating the result cannot change the
+        captured selection. Empty until the button is first clicked with a
+        selection.
         """
         return _copy_rows(self._fetched_runs)
 
@@ -276,12 +277,19 @@ class RunsSelector(ui.column):
         self._fetch_status.set_text(text)
         self._fetch_status.set_visibility(bool(text))
 
+    def _set_selection_buttons_enabled(self, enabled: bool) -> None:
+        """Enable or disable both selection buttons together.
+
+        Every path that reacts to the selection goes through here, so the two
+        buttons cannot drift into disagreeing about whether a selection exists.
+        """
+        self._fetch_button.set_enabled(enabled)
+        self._clear_button.set_enabled(enabled)
+
     async def _on_selection_change(self, _event: Any = None) -> None:
         """Enable the selection buttons only while the table has a selection."""
         rows = await self._table.selected_rows()
-        enabled = bool(rows)
-        self._fetch_button.set_enabled(enabled)
-        self._clear_button.set_enabled(enabled)
+        self._set_selection_buttons_enabled(bool(rows))
 
     def _on_table_rebuilt(self, _event: Any = None) -> None:
         """Disable the selection buttons whenever the grid is rebuilt.
@@ -291,14 +299,12 @@ class RunsSelector(ui.column):
         Already-fetched runs are kept: they were captured deliberately, and the
         status line still describes them.
         """
-        self._fetch_button.set_enabled(False)
-        self._clear_button.set_enabled(False)
+        self._set_selection_buttons_enabled(False)
 
     async def _on_clear_selection(self, _event: Any = None) -> None:
         """Deselect every highlighted row and disable fetching immediately."""
         await self._table._table.run_grid_method("deselectAll")
-        self._fetch_button.set_enabled(False)
-        self._clear_button.set_enabled(False)
+        self._set_selection_buttons_enabled(False)
 
     async def _on_fetch(self, _event: Any = None) -> None:
         """Capture the selected runs, ordered by increasing run number.
@@ -313,7 +319,7 @@ class RunsSelector(ui.column):
         if not rows:
             # Reaching here means the enabled state was stale, so correct it and
             # report the reason. Any previously fetched runs are left intact.
-            self._fetch_button.set_enabled(False)
+            self._set_selection_buttons_enabled(False)
             self._set_fetch_status(NO_SELECTION_MESSAGE)
             return
         self._fetched_runs = sorted(_copy_rows(rows), key=lambda row: int(row[ID_COLUMN]))
