@@ -14,7 +14,16 @@ from nicegui.testing import User
 from pyoncatng.widgets.iptstable import IPTSTable
 from pyoncatng.widgets.login import OncatLogin
 
-from usansemble.widgets.runs_selector import PROCESSING_VARIABLES, SELECTION_HELP, TITLE_COLUMN, RunsSelector
+from usansemble.widgets.runs_selector import (
+    FETCH_BUTTON_LABEL,
+    FETCHED_MESSAGE,
+    ID_COLUMN,
+    NO_SELECTION_MESSAGE,
+    PROCESSING_VARIABLES,
+    SELECTION_HELP,
+    TITLE_COLUMN,
+    RunsSelector,
+)
 
 # A sample run as returned by ONCat with a flat, dot-path projection. USANS runs
 # expose metadata under datafiles.raw.metadata.entry.*.
@@ -28,6 +37,29 @@ SAMPLE_RUN = {
 
 def _selector(user: User) -> RunsSelector:
     return next(iter(user.find(RunsSelector).elements))
+
+
+def _row(run_id: int) -> dict:
+    """A table row as ``IPTSTable`` builds it, for the given run number."""
+    return {
+        "ID": run_id,
+        "Title": "Align:500 10min cure with SI",
+        "Start Time": "2020-11-23T20:31:23.874765-05:00",
+        "Total Counts": 261607,
+    }
+
+
+def _stub_selection(selector: RunsSelector, rows: list) -> None:
+    """Make the table report ``rows`` as selected.
+
+    ``IPTSTable.selected_rows`` round-trips to AG Grid in the browser, which the
+    in-process simulation cannot do, so it is replaced with an async stub.
+    """
+
+    async def _selected_rows():
+        return list(rows)
+
+    selector.table.selected_rows = _selected_rows
 
 
 async def test_runs_selector_renders(user: User, fake_agent) -> None:
@@ -129,3 +161,92 @@ async def test_runs_selector_on_connection_change_is_forwarded(user: User, fake_
     selector.login._update_connection_status()
 
     assert seen == [selector.login.is_connected]
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_fetch_button_starts_disabled(user: User) -> None:
+    await user.open("/runs")
+    await user.should_see(FETCH_BUTTON_LABEL)
+    selector = _selector(user)
+
+    # Nothing is loaded yet, so there is nothing to fetch.
+    assert selector._fetch_button.enabled is False
+    # The button belongs to the RunsSelector column, not the table card, so it
+    # renders below the table.
+    assert selector._fetch_button.parent_slot.parent is selector
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_fetch_button_follows_the_selection(user: User) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+
+    _stub_selection(selector, [_row(33221)])
+    await selector._on_selection_change()
+    assert selector._fetch_button.enabled is True
+
+    _stub_selection(selector, [])
+    await selector._on_selection_change()
+    assert selector._fetch_button.enabled is False
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_fetch_runs_sorts_by_increasing_id(user: User) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+    # AG Grid returns the rows in the order the selection was built, which is
+    # not necessarily run-number order.
+    _stub_selection(selector, [_row(33219), _row(33221), _row(33220)])
+
+    await selector._on_fetch()
+
+    assert [row[ID_COLUMN] for row in selector.fetched_runs] == [33219, 33220, 33221]
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_fetched_runs_is_a_copy(user: User) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+    _stub_selection(selector, [_row(33221)])
+    await selector._on_fetch()
+
+    selector.fetched_runs.clear()
+
+    assert [row[ID_COLUMN] for row in selector.fetched_runs] == [33221]
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_fetch_runs_notifies_and_reports(user: User) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+    seen: list[list[dict]] = []
+    selector.on_runs_fetched(seen.append)
+    _stub_selection(selector, [_row(33221), _row(33220)])
+
+    await selector._on_fetch()
+
+    assert [row[ID_COLUMN] for row in seen[0]] == [33220, 33221]
+    await user.should_see(FETCHED_MESSAGE.format(n=2))
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_fetch_runs_without_a_selection_keeps_the_previous_runs(user: User) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+    _stub_selection(selector, [_row(33221)])
+    await selector._on_fetch()
+
+    # The button guards against this, but a Load that drops the selection may
+    # not fire selectionChanged, so an empty fetch must not discard the runs.
+    _stub_selection(selector, [])
+    await selector._on_fetch()
+
+    assert [row[ID_COLUMN] for row in selector.fetched_runs] == [33221]
+    await user.should_see(NO_SELECTION_MESSAGE)
+
+
+def test_fetch_sorts_on_the_table_key_column() -> None:
+    # IPTSTable prepends the key column itself, so a rename there would silently
+    # break the sort; ID_COLUMN aliases that constant.
+    assert ID_COLUMN == "ID"
+    assert ID_COLUMN not in [label for label, _ in PROCESSING_VARIABLES]

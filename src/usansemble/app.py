@@ -18,7 +18,8 @@ def index() -> None:
         ui.label("usansemble").classes("text-h5")
         ui.markdown(
             "Sign in to ONCat, then enter an IPTS number (e.g. **24703**) and click "
-            "**Load** to fetch its USANS runs. Selecting runs and exporting a "
-            "`usansred` configuration will come next."
+            "**Load** to fetch its USANS runs. Use the table's selection gestures "
+            "to choose runs, then click **Fetch Runs** to capture them; assigning "
+            "them to roles and exporting a `usansred` configuration will come next."
         )
         RunsSelector(facility="SNS", instrument="USANS")
