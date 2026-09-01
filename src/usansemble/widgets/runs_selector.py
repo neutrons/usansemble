@@ -167,6 +167,11 @@ class RunsSelector(ui.column):
     def fetched_runs(self) -> List[Row]:
         """The runs captured by the last **Fetch Runs**, by increasing run number.
 
+        Each **Fetch Runs** click replaces this with whatever is highlighted at
+        the time; nothing else does. Loading another IPTS or signing out leaves
+        the last capture in place, so it stays available to the later steps of
+        the config-assembly flow until the user fetches again.
+
         Deep copies of the stored rows, so a consumer cannot mutate the captured
         selection -- the same boundary ``RunTable`` draws around its own rows.
         Empty until the button is first clicked with a selection.

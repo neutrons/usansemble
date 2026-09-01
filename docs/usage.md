@@ -31,7 +31,8 @@ pyoncatng's `OncatLogin` and `IPTSTable`:
    disabled until the table has a selection, and the captured runs are ordered
    by increasing run number regardless of the order they were selected in.
    Loading another IPTS clears the selection and disables the button again;
-   runs already fetched are kept.
+   the runs fetched before it are kept. Each click replaces the previous
+   capture, so the widget holds exactly the runs highlighted at the last click.
 
 Assigning runs to roles (sample / background / empty cell / empty beam) and
 exporting the `usansred` JSON configuration are planned for subsequent
