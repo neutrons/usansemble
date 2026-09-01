@@ -15,6 +15,7 @@ from pyoncatng.widgets.iptstable import IPTSTable
 from pyoncatng.widgets.login import OncatLogin
 
 from usansemble.widgets.runs_selector import (
+    CLEAR_BUTTON_LABEL,
     FETCH_BUTTON_LABEL,
     FETCHED_MESSAGE,
     ID_COLUMN,
@@ -167,13 +168,36 @@ async def test_runs_selector_on_connection_change_is_forwarded(user: User, fake_
 async def test_fetch_button_starts_disabled(user: User) -> None:
     await user.open("/runs")
     await user.should_see(FETCH_BUTTON_LABEL)
+    await user.should_see(CLEAR_BUTTON_LABEL)
     selector = _selector(user)
 
     # Nothing is loaded yet, so there is nothing to fetch.
     assert selector._fetch_button.enabled is False
-    # The button belongs to the RunsSelector column, not the table card, so it
-    # renders below the table.
-    assert selector._fetch_button.parent_slot.parent is selector
+    assert selector._clear_button.enabled is False
+    # Both buttons belong to the RunsSelector column, not the table card, so
+    # they render below the table next to each other.
+    assert selector._selection_buttons.parent_slot.parent is selector
+    assert selector._fetch_button.parent_slot.parent is selector._selection_buttons
+    assert selector._clear_button.parent_slot.parent is selector._selection_buttons
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_clear_selection_deselects_rows_and_disables_fetch(user: User, monkeypatch) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+    calls = []
+
+    async def deselect_all(name):
+        calls.append(name)
+
+    monkeypatch.setattr(selector.table._table, "run_grid_method", deselect_all)
+    selector._fetch_button.set_enabled(True)
+
+    await selector._on_clear_selection()
+
+    assert calls == ["deselectAll"]
+    assert selector._fetch_button.enabled is False
+    assert selector._clear_button.enabled is False
 
 
 @pytest.mark.usefixtures("fake_agent")
@@ -184,10 +208,12 @@ async def test_fetch_button_follows_the_selection(user: User) -> None:
     _stub_selection(selector, [_row(33221)])
     await selector._on_selection_change()
     assert selector._fetch_button.enabled is True
+    assert selector._clear_button.enabled is True
 
     _stub_selection(selector, [])
     await selector._on_selection_change()
     assert selector._fetch_button.enabled is False
+    assert selector._clear_button.enabled is False
 
 
 @pytest.mark.usefixtures("fake_agent")

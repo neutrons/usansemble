@@ -18,9 +18,10 @@ A **Fetch Runs** button below the table captures the current selection. AG Grid
 returns selected rows in the order the selection was built, so the captured rows
 are sorted by increasing run number before being stored. Consumers read them
 through :attr:`RunsSelector.fetched_runs` or subscribe with
-:meth:`RunsSelector.on_runs_fetched`. The button is enabled only while the table
-holds a selection: loading another IPTS rebuilds the grid and drops the
-selection, which disables it again.
+:meth:`RunsSelector.on_runs_fetched`. A **Clear Selection** button beside it
+deselects all highlighted rows. Both buttons are enabled only while the table
+holds a selection; clearing the selection or loading another IPTS disables them
+again.
 """
 
 import copy
@@ -81,6 +82,7 @@ SELECTION_HELP = (
 
 # The button capturing the selection, and the two outcomes it reports.
 FETCH_BUTTON_LABEL = "Fetch Runs"
+CLEAR_BUTTON_LABEL = "Clear Selection"
 FETCHED_MESSAGE = "Fetched {n} run(s)."
 NO_SELECTION_MESSAGE = "Select at least one run first."
 
@@ -245,14 +247,18 @@ class RunsSelector(ui.column):
             self._selection_help = ui.label(SELECTION_HELP).classes("text-xs text-gray-500")
 
     def _add_fetch_button(self) -> None:
-        """Add the **Fetch Runs** button and its status line below the table.
+        """Add the selection buttons and status line below the table.
 
         Built in the ``RunsSelector`` column rather than inside the table card,
-        so it sits under the card. The button stays disabled until the table has
-        a selection; the enabling is driven by the table's selection-change hook.
+        so they sit under the card. Both buttons stay disabled until the table
+        has a selection; their enabling is driven by the table's
+        selection-change hook.
         """
-        self._fetch_button = ui.button(FETCH_BUTTON_LABEL, on_click=self._on_fetch)
-        self._fetch_button.set_enabled(False)
+        with ui.row().classes("items-center") as self._selection_buttons:
+            self._fetch_button = ui.button(FETCH_BUTTON_LABEL, on_click=self._on_fetch)
+            self._fetch_button.set_enabled(False)
+            self._clear_button = ui.button(CLEAR_BUTTON_LABEL, on_click=self._on_clear_selection)
+            self._clear_button.set_enabled(False)
         self._fetch_status = ui.label("").classes("text-xs text-gray-500")
         self._fetch_status.set_visibility(False)
         self._table.on_selection_change(self._on_selection_change)
@@ -271,12 +277,14 @@ class RunsSelector(ui.column):
         self._fetch_status.set_visibility(bool(text))
 
     async def _on_selection_change(self, _event: Any = None) -> None:
-        """Enable the fetch button only while the table has a selection."""
+        """Enable the selection buttons only while the table has a selection."""
         rows = await self._table.selected_rows()
-        self._fetch_button.set_enabled(bool(rows))
+        enabled = bool(rows)
+        self._fetch_button.set_enabled(enabled)
+        self._clear_button.set_enabled(enabled)
 
     def _on_table_rebuilt(self, _event: Any = None) -> None:
-        """Disable the fetch button whenever the grid is rebuilt.
+        """Disable the selection buttons whenever the grid is rebuilt.
 
         Loading another IPTS replaces the rows, so any highlighted row numbers
         now address different runs and the selection must not be fetchable.
@@ -284,6 +292,13 @@ class RunsSelector(ui.column):
         status line still describes them.
         """
         self._fetch_button.set_enabled(False)
+        self._clear_button.set_enabled(False)
+
+    async def _on_clear_selection(self, _event: Any = None) -> None:
+        """Deselect every highlighted row and disable fetching immediately."""
+        await self._table._table.run_grid_method("deselectAll")
+        self._fetch_button.set_enabled(False)
+        self._clear_button.set_enabled(False)
 
     async def _on_fetch(self, _event: Any = None) -> None:
         """Capture the selected runs, ordered by increasing run number.

@@ -27,7 +27,10 @@ pyoncatng's `OncatLogin` and `IPTSTable`:
 3. Select runs in the table: click selects one run, Ctrl/Cmd+click toggles a run,
    Shift+click selects a range, and double-click selects every run with the same
    title. Ctrl/Cmd+double-click adds that title group to the selection.
-4. Click **Fetch Runs** to capture the highlighted runs. The button stays
+4. Click **Clear Selection** to deselect all highlighted runs and start over.
+   Like **Fetch Runs**, this button is enabled only while the table has a
+   selection. Clearing the selection disables both buttons again.
+5. Click **Fetch Runs** to capture the highlighted runs. The button stays
    disabled until the table has a selection, and the captured runs are ordered
    by increasing run number regardless of the order they were selected in.
    Loading another IPTS clears the selection and disables the button again;
