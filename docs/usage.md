@@ -30,6 +30,8 @@ pyoncatng's `OncatLogin` and `IPTSTable`:
 4. Click **Fetch Runs** to capture the highlighted runs. The button stays
    disabled until the table has a selection, and the captured runs are ordered
    by increasing run number regardless of the order they were selected in.
+   Loading another IPTS clears the selection and disables the button again;
+   runs already fetched are kept.
 
 Assigning runs to roles (sample / background / empty cell / empty beam) and
 exporting the `usansred` JSON configuration are planned for subsequent

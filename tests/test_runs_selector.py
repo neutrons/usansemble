@@ -210,9 +210,45 @@ async def test_fetched_runs_is_a_copy(user: User) -> None:
     _stub_selection(selector, [_row(33221)])
     await selector._on_fetch()
 
-    selector.fetched_runs.clear()
+    # Both levels: dropping a row from the returned list, and editing a row in
+    # it, must leave the captured runs untouched.
+    returned = selector.fetched_runs
+    returned[0][TITLE_COLUMN] = "mutated"
+    returned.clear()
 
     assert [row[ID_COLUMN] for row in selector.fetched_runs] == [33221]
+    assert selector.fetched_runs[0][TITLE_COLUMN] != "mutated"
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_fetched_runs_copies_nested_values(user: User) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+    # A row carries whatever the ONCat projection returned, which a metadata path
+    # may report as a list rather than a scalar.
+    row = _row(33221)
+    row["Total Counts"] = [1, 2, 3]
+    _stub_selection(selector, [row])
+    await selector._on_fetch()
+
+    selector.fetched_runs[0]["Total Counts"].append(4)
+
+    assert selector.fetched_runs[0]["Total Counts"] == [1, 2, 3]
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_fetch_callbacks_get_independent_rows(user: User) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+    seen: list[list[dict]] = []
+    selector.on_runs_fetched(seen.append)
+    _stub_selection(selector, [_row(33221)])
+    await selector._on_fetch()
+
+    # A callback editing its payload must not change what later readers see.
+    seen[0][0][TITLE_COLUMN] = "mutated"
+
+    assert selector.fetched_runs[0][TITLE_COLUMN] != "mutated"
 
 
 @pytest.mark.usefixtures("fake_agent")
@@ -242,7 +278,39 @@ async def test_fetch_runs_without_a_selection_keeps_the_previous_runs(user: User
     await selector._on_fetch()
 
     assert [row[ID_COLUMN] for row in selector.fetched_runs] == [33221]
+    assert selector._fetch_button.enabled is False
     await user.should_see(NO_SELECTION_MESSAGE)
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_loading_new_runs_disables_the_fetch_button(user: User) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+    _stub_selection(selector, [_row(33221)])
+    await selector._on_selection_change()
+    await selector._on_fetch()
+    assert selector._fetch_button.enabled is True
+
+    # A Load rebuilds the grid, dropping the selection; the row numbers now
+    # address different runs, so the button must not stay enabled.
+    selector._on_table_rebuilt()
+
+    assert selector._fetch_button.enabled is False
+    # The runs captured before the reload are kept.
+    assert [row[ID_COLUMN] for row in selector.fetched_runs] == [33221]
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_table_rebuild_is_wired_to_grid_ready(user: User) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+
+    # NiceGUI rebuilds the grid on every update, so gridReady is the event that
+    # signals the selection was dropped.
+    handlers = [
+        listener.handler for listener in selector.table._table._event_listeners.values() if listener.type == "gridReady"
+    ]
+    assert selector._on_table_rebuilt in handlers
 
 
 def test_fetch_sorts_on_the_table_key_column() -> None:

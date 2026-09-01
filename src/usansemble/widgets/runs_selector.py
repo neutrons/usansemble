@@ -18,9 +18,12 @@ A **Fetch Runs** button below the table captures the current selection. AG Grid
 returns selected rows in the order the selection was built, so the captured rows
 are sorted by increasing run number before being stored. Consumers read them
 through :attr:`RunsSelector.fetched_runs` or subscribe with
-:meth:`RunsSelector.on_runs_fetched`.
+:meth:`RunsSelector.on_runs_fetched`. The button is enabled only while the table
+holds a selection: loading another IPTS rebuilds the grid and drops the
+selection, which disables it again.
 """
 
+import copy
 import json
 from typing import Any, Callable, List, Optional
 
@@ -80,6 +83,18 @@ SELECTION_HELP = (
 FETCH_BUTTON_LABEL = "Fetch Runs"
 FETCHED_MESSAGE = "Fetched {n} run(s)."
 NO_SELECTION_MESSAGE = "Select at least one run first."
+
+
+def _copy_rows(rows: List[Row]) -> List[Row]:
+    """Deep-copy a row list, so nothing in it is shared with the caller.
+
+    Row values are scalars today (run number, title, timestamp, counts), but a
+    row holds whatever the ONCat projection returned (``IPTSTable.rows_from_runs``
+    copies ``run.get(path)`` verbatim), and a metadata path may yield a list or a
+    nested dict. Copying in depth keeps the boundary intact whatever the columns
+    are configured to fetch.
+    """
+    return copy.deepcopy(list(rows))
 
 
 class RunsSelector(ui.column):
@@ -152,10 +167,11 @@ class RunsSelector(ui.column):
     def fetched_runs(self) -> List[Row]:
         """The runs captured by the last **Fetch Runs**, by increasing run number.
 
-        A copy of the widget's list, so a consumer cannot mutate the stored
-        selection. Empty until the button is first clicked with a selection.
+        Deep copies of the stored rows, so a consumer cannot mutate the captured
+        selection -- the same boundary ``RunTable`` draws around its own rows.
+        Empty until the button is first clicked with a selection.
         """
-        return list(self._fetched_runs)
+        return _copy_rows(self._fetched_runs)
 
     def on_connection_change(self, callback: Callable[[bool], None]) -> None:
         """Register a callback fired with the connected bool on every change.
@@ -235,6 +251,12 @@ class RunsSelector(ui.column):
         self._fetch_status = ui.label("").classes("text-xs text-gray-500")
         self._fetch_status.set_visibility(False)
         self._table.on_selection_change(self._on_selection_change)
+        # A Load replaces the rows through NiceGUI's aggrid update method, which
+        # destroys and recreates the grid rather than patching it; the selection
+        # is dropped without a selectionChanged event, so the button has to be
+        # reset on the rebuild instead. ``gridReady`` fires on every rebuild.
+        # ``IPTSTable`` keeps its grid private, hence the reach into ``_table``.
+        self._table._table.on("gridReady", self._on_table_rebuilt)
 
     # -- fetching -----------------------------------------------------------
 
@@ -248,6 +270,16 @@ class RunsSelector(ui.column):
         rows = await self._table.selected_rows()
         self._fetch_button.set_enabled(bool(rows))
 
+    def _on_table_rebuilt(self, _event: Any = None) -> None:
+        """Disable the fetch button whenever the grid is rebuilt.
+
+        Loading another IPTS replaces the rows, so any highlighted row numbers
+        now address different runs and the selection must not be fetchable.
+        Already-fetched runs are kept: they were captured deliberately, and the
+        status line still describes them.
+        """
+        self._fetch_button.set_enabled(False)
+
     async def _on_fetch(self, _event: Any = None) -> None:
         """Capture the selected runs, ordered by increasing run number.
 
@@ -259,13 +291,12 @@ class RunsSelector(ui.column):
         """
         rows = await self._table.selected_rows()
         if not rows:
-            # The button is disabled without a selection, but AG Grid does not
-            # guarantee a selectionChanged event when Load replaces the rows, so
-            # the empty case is handled rather than assumed away. Any previously
-            # fetched runs are left intact.
+            # Reaching here means the enabled state was stale, so correct it and
+            # report the reason. Any previously fetched runs are left intact.
+            self._fetch_button.set_enabled(False)
             self._set_fetch_status(NO_SELECTION_MESSAGE)
             return
-        self._fetched_runs = sorted(rows, key=lambda row: int(row[ID_COLUMN]))
+        self._fetched_runs = sorted(_copy_rows(rows), key=lambda row: int(row[ID_COLUMN]))
         self._set_fetch_status(FETCHED_MESSAGE.format(n=len(self._fetched_runs)))
         for callback in self._fetch_callbacks:
-            callback(list(self._fetched_runs))
+            callback(self.fetched_runs)
