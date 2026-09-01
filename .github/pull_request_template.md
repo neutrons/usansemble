@@ -10,8 +10,8 @@
 
 - [ ] Updated documentation
 - [ ] Source added/refactored
-- [ ] Added unit tests
-- [ ] Added widget/UI tests
+- [ ] Unit tests added/refactored
+- [ ] Widget/UI tests added/refactored
 - [ ] Updated packaging, dependency, or Pixi configuration
 
 

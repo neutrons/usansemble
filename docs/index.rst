@@ -15,7 +15,6 @@ experiment's runs, and (soon) assign runs to roles and export a setup file.
    usage
    getting-started
    testing
-   documentation
-   build-publish-packages
+   build-publish
    license
    indices-and-tables

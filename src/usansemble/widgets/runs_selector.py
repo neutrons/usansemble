@@ -13,14 +13,29 @@ itself is read through ``IPTSTable`` (``selected_rows()`` /
 (click/Ctrl+click/Shift+click) this widget adds a **double-click** that selects
 every run sharing the double-clicked run's title, since the runs of one USANS
 measurement share a title -- see :data:`_SELECT_BY_TITLE_JS`.
+
+A **Fetch Runs** button below the table captures the current selection. AG Grid
+returns selected rows in the order the selection was built, so the captured rows
+are sorted by increasing run number before being stored. Consumers read them
+through :attr:`RunsSelector.fetched_runs` or subscribe with
+:meth:`RunsSelector.on_runs_fetched`. A **Clear Selection** button beside it
+deselects all highlighted rows. Both buttons are enabled only while the table
+holds a selection; clearing the selection or loading another IPTS disables them
+again.
 """
 
+import copy
 import json
-from typing import Callable, Optional
+from typing import Any, Callable, List, Optional
 
 from nicegui import ui
 from pyoncatng.configuration import get_data
-from pyoncatng.widgets.iptstable import IPTSTable
+
+# ``IPTSTable`` always prepends its key column (the run number) to the caller's
+# processing variables, so the ID column name is not in PROCESSING_VARIABLES
+# below; alias the widget's own constant to stay in step with it.
+from pyoncatng.widgets.iptstable import KEY_COLUMN as ID_COLUMN
+from pyoncatng.widgets.iptstable import IPTSTable, Row
 from pyoncatng.widgets.login import OncatLogin
 
 PROCESSING_VARIABLES = (
@@ -64,6 +79,25 @@ SELECTION_HELP = (
     "Double-click selects every run with the same title · "
     "Ctrl/Cmd+double-click adds them to the selection"
 )
+
+# The button capturing the selection, and the two outcomes it reports.
+FETCH_BUTTON_LABEL = "Fetch Runs"
+CLEAR_BUTTON_LABEL = "Clear Selection"
+FETCHED_MESSAGE = "Fetched {n} run(s)."
+NO_SELECTION_MESSAGE = "Select at least one run first."
+
+
+def _copy_rows(rows: List[Row]) -> List[Row]:
+    """Deep-copy a row list, so nothing in it is shared with the caller.
+
+    Row values are scalars today (run number, title, timestamp, counts), but a
+    row holds whatever the ONCat projection returned (``IPTSTable.rows_from_runs``
+    copies ``run.get(path)`` verbatim), and a metadata path may yield a list or a
+    nested dict. Copying in depth keeps the boundary intact whatever the columns
+    are configured to fetch. It is the same boundary pyoncatng's ``RunTable``
+    draws around its own rows, in depth rather than one level.
+    """
+    return copy.deepcopy(list(rows))
 
 
 class RunsSelector(ui.column):
@@ -111,6 +145,8 @@ class RunsSelector(ui.column):
         self._instrument = instrument
         self._table_height = table_height
         self._login_orientation = login_orientation
+        self._fetched_runs: List[Row] = []
+        self._fetch_callbacks: List[Callable[[List[Row]], None]] = []
         self._build_ui()
 
     # -- public integration surface ----------------------------------------
@@ -130,6 +166,21 @@ class RunsSelector(ui.column):
         """The authenticated ONCat agent, for consumers to query."""
         return self._login.agent
 
+    @property
+    def fetched_runs(self) -> List[Row]:
+        """The runs captured by the last **Fetch Runs**, by increasing run number.
+
+        Each **Fetch Runs** click replaces this with whatever is highlighted at
+        the time; nothing else does. Loading another IPTS or signing out leaves
+        the last capture in place, so it stays available to the later steps of
+        the config-assembly flow until the user fetches again.
+
+        Deep copies of the stored rows, so mutating the result cannot change the
+        captured selection. Empty until the button is first clicked with a
+        selection.
+        """
+        return _copy_rows(self._fetched_runs)
+
     def on_connection_change(self, callback: Callable[[bool], None]) -> None:
         """Register a callback fired with the connected bool on every change.
 
@@ -137,6 +188,14 @@ class RunsSelector(ui.column):
         consumers can react to sign-in without reaching into ``login``.
         """
         self._login.on_connection_change(callback)
+
+    def on_runs_fetched(self, callback: Callable[[List[Row]], None]) -> None:
+        """Register a callback fired with the fetched runs on every fetch.
+
+        The callback receives the same sorted list :attr:`fetched_runs` returns.
+        Callbacks are synchronous, matching ``on_connection_change``.
+        """
+        self._fetch_callbacks.append(callback)
 
     # -- UI construction ----------------------------------------------------
 
@@ -163,6 +222,7 @@ class RunsSelector(ui.column):
             )
             self._enable_title_double_click()
             self._add_selection_help()
+            self._add_fetch_button()
 
     def _enable_title_double_click(self) -> None:
         """Make a double-click select every row sharing the clicked row's title.
@@ -186,3 +246,83 @@ class RunsSelector(ui.column):
         """
         with self._table:
             self._selection_help = ui.label(SELECTION_HELP).classes("text-xs text-gray-500")
+
+    def _add_fetch_button(self) -> None:
+        """Add the selection buttons and status line below the table.
+
+        Built in the ``RunsSelector`` column rather than inside the table card,
+        so they sit under the card. Both buttons stay disabled until the table
+        has a selection; their enabling is driven by the table's
+        selection-change hook.
+        """
+        with ui.row().classes("items-center") as self._selection_buttons:
+            self._fetch_button = ui.button(FETCH_BUTTON_LABEL, on_click=self._on_fetch)
+            self._fetch_button.set_enabled(False)
+            self._clear_button = ui.button(CLEAR_BUTTON_LABEL, on_click=self._on_clear_selection)
+            self._clear_button.set_enabled(False)
+        self._fetch_status = ui.label("").classes("text-xs text-gray-500")
+        self._fetch_status.set_visibility(False)
+        self._table.on_selection_change(self._on_selection_change)
+        # A Load replaces the rows through NiceGUI's aggrid update method, which
+        # destroys and recreates the grid rather than patching it; the selection
+        # is dropped without a selectionChanged event, so the button has to be
+        # reset on the rebuild instead. ``gridReady`` fires on every rebuild.
+        # ``IPTSTable`` keeps its grid private, hence the reach into ``_table``.
+        self._table._table.on("gridReady", self._on_table_rebuilt)
+
+    # -- fetching -----------------------------------------------------------
+
+    def _set_fetch_status(self, text: str) -> None:
+        """Show (or clear, when ``text`` is empty) the fetch status line."""
+        self._fetch_status.set_text(text)
+        self._fetch_status.set_visibility(bool(text))
+
+    def _set_selection_buttons_enabled(self, enabled: bool) -> None:
+        """Enable or disable both selection buttons together.
+
+        Every path that reacts to the selection goes through here, so the two
+        buttons cannot drift into disagreeing about whether a selection exists.
+        """
+        self._fetch_button.set_enabled(enabled)
+        self._clear_button.set_enabled(enabled)
+
+    async def _on_selection_change(self, _event: Any = None) -> None:
+        """Enable the selection buttons only while the table has a selection."""
+        rows = await self._table.selected_rows()
+        self._set_selection_buttons_enabled(bool(rows))
+
+    def _on_table_rebuilt(self, _event: Any = None) -> None:
+        """Disable the selection buttons whenever the grid is rebuilt.
+
+        Loading another IPTS replaces the rows, so any highlighted row numbers
+        now address different runs and the selection must not be fetchable.
+        Already-fetched runs are kept: they were captured deliberately, and the
+        status line still describes them.
+        """
+        self._set_selection_buttons_enabled(False)
+
+    async def _on_clear_selection(self, _event: Any = None) -> None:
+        """Deselect every highlighted row and disable fetching immediately."""
+        await self._table._table.run_grid_method("deselectAll")
+        self._set_selection_buttons_enabled(False)
+
+    async def _on_fetch(self, _event: Any = None) -> None:
+        """Capture the selected runs, ordered by increasing run number.
+
+        ``selected_rows()`` reaches AG Grid's ``getSelectedRows``, which returns
+        the rows in the order the selection was built (Ctrl+click order, or the
+        order the title double-click handler selected them), so the rows are
+        sorted here. ``int`` keeps the ordering numeric should ONCat ever report
+        the run number as a string.
+        """
+        rows = await self._table.selected_rows()
+        if not rows:
+            # Reaching here means the enabled state was stale, so correct it and
+            # report the reason. Any previously fetched runs are left intact.
+            self._set_selection_buttons_enabled(False)
+            self._set_fetch_status(NO_SELECTION_MESSAGE)
+            return
+        self._fetched_runs = sorted(_copy_rows(rows), key=lambda row: int(row[ID_COLUMN]))
+        self._set_fetch_status(FETCHED_MESSAGE.format(n=len(self._fetched_runs)))
+        for callback in self._fetch_callbacks:
+            callback(self.fetched_runs)
