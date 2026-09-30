@@ -16,7 +16,8 @@ measurement share a title -- see :data:`_SELECT_BY_TITLE_JS`.
 
 A **Fetch Runs** button below the table captures the current selection. AG Grid
 returns selected rows in the order the selection was built, so the captured rows
-are sorted by increasing run number before being stored. Consumers read them
+are sorted by decreasing run number before being stored, the order in which
+ONCat lists the runs and the table shows them. Consumers read them
 through :attr:`RunsSelector.fetched_runs` or subscribe with
 :meth:`RunsSelector.on_runs_fetched`. A **Clear Selection** button beside it
 deselects all highlighted rows. Both buttons are enabled only while the table
@@ -168,7 +169,7 @@ class RunsSelector(ui.column):
 
     @property
     def fetched_runs(self) -> List[Row]:
-        """The runs captured by the last **Fetch Runs**, by increasing run number.
+        """The runs captured by the last **Fetch Runs**, by decreasing run number.
 
         Each **Fetch Runs** click replaces this with whatever is highlighted at
         the time; nothing else does. Loading another IPTS or signing out leaves
@@ -307,13 +308,13 @@ class RunsSelector(ui.column):
         self._set_selection_buttons_enabled(False)
 
     async def _on_fetch(self, _event: Any = None) -> None:
-        """Capture the selected runs, ordered by increasing run number.
+        """Capture the selected runs, ordered by decreasing run number.
 
         ``selected_rows()`` reaches AG Grid's ``getSelectedRows``, which returns
         the rows in the order the selection was built (Ctrl+click order, or the
         order the title double-click handler selected them), so the rows are
-        sorted here. ``int`` keeps the ordering numeric should ONCat ever report
-        the run number as a string.
+        sorted here into the order in which ONCat lists them. ``int`` keeps the
+        ordering numeric should ONCat ever report the run number as a string.
         """
         rows = await self._table.selected_rows()
         if not rows:
@@ -322,7 +323,7 @@ class RunsSelector(ui.column):
             self._set_selection_buttons_enabled(False)
             self._set_fetch_status(NO_SELECTION_MESSAGE)
             return
-        self._fetched_runs = sorted(_copy_rows(rows), key=lambda row: int(row[ID_COLUMN]))
+        self._fetched_runs = sorted(_copy_rows(rows), key=lambda row: int(row[ID_COLUMN]), reverse=True)
         self._set_fetch_status(FETCHED_MESSAGE.format(n=len(self._fetched_runs)))
         for callback in self._fetch_callbacks:
             callback(self.fetched_runs)

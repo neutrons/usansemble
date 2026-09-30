@@ -32,7 +32,8 @@ pyoncatng's `OncatLogin` and `IPTSTable`:
    selection. Clearing the selection disables both buttons again.
 5. Click **Fetch Runs** to capture the highlighted runs. The button stays
    disabled until the table has a selection, and the captured runs are ordered
-   by increasing run number regardless of the order they were selected in.
+   by decreasing run number, as the table lists them, regardless of the order
+   they were selected in.
    Loading another IPTS clears the selection and disables the button again;
    the runs fetched before it are kept. Each click replaces the previous
    capture, so the widget holds exactly the runs highlighted at the last click.

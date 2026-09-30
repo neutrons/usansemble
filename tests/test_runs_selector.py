@@ -217,7 +217,7 @@ async def test_fetch_button_follows_the_selection(user: User) -> None:
 
 
 @pytest.mark.usefixtures("fake_agent")
-async def test_fetch_runs_sorts_by_increasing_id(user: User) -> None:
+async def test_fetch_runs_sorts_by_decreasing_id(user: User) -> None:
     await user.open("/runs")
     selector = _selector(user)
     # AG Grid returns the rows in the order the selection was built, which is
@@ -226,7 +226,7 @@ async def test_fetch_runs_sorts_by_increasing_id(user: User) -> None:
 
     await selector._on_fetch()
 
-    assert [row[ID_COLUMN] for row in selector.fetched_runs] == [33219, 33220, 33221]
+    assert [row[ID_COLUMN] for row in selector.fetched_runs] == [33221, 33220, 33219]
 
 
 @pytest.mark.usefixtures("fake_agent")
@@ -283,11 +283,11 @@ async def test_fetch_runs_notifies_and_reports(user: User) -> None:
     selector = _selector(user)
     seen: list[list[dict]] = []
     selector.on_runs_fetched(seen.append)
-    _stub_selection(selector, [_row(33221), _row(33220)])
+    _stub_selection(selector, [_row(33220), _row(33221)])
 
     await selector._on_fetch()
 
-    assert [row[ID_COLUMN] for row in seen[0]] == [33220, 33221]
+    assert [row[ID_COLUMN] for row in seen[0]] == [33221, 33220]
     await user.should_see(FETCHED_MESSAGE.format(n=2))
 
 
