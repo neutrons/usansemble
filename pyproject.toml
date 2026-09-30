@@ -5,7 +5,7 @@
 name = "usansemble"
 description = "NiceGUI web app to assemble usansred JSON reduction configurations"
 dynamic = ["version"]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "GPL-3.0" }
 keywords = ["neutrons", "usans", "usansred", "oncat", "nicegui"]
 readme = "README.md"
@@ -83,7 +83,7 @@ platforms = ["linux-64", "osx-arm64"] # add additional platforms as needed
 
 [tool.pixi.dependencies]
 # Conda package dependencies
-python = ">=3.10"
+python = ">=3.11"
 pyoncatng = "*"
 nicegui = "*"
 argcomplete = "*"
@@ -101,7 +101,7 @@ msgpack-python = ">=1.2.1"   # GHSA-6v7p-g79w-8964
 [tool.pixi.pypi-dependencies]
 # PyPI dependencies, including this package to allow local editable installs
 usansemble = { path = ".", editable = true }
-jaraco-context = ">=6.1.0"                  # CVE-2026-23949
+jaraco-context = ">=6.1.0"                   # CVE-2026-23949
 
 # Pixi Build configuration - https://pixi.sh/latest/reference/pixi_manifest/#pixi-build
 
@@ -110,14 +110,14 @@ hatchling = "*"
 versioningit = "*"
 
 [tool.pixi.package.run-dependencies]
-python = ">=3.10"
+python = ">=3.11"
 pyoncatng = "*"
 nicegui = "*"
 argcomplete = "*"
 
 [tool.pixi.package]
 name = "usansemble"
-version = "0.0.0"  # placeholder, overwritten by sync-version
+version = "0.0.0"   # placeholder, overwritten by sync-version
 
 [tool.pixi.package.build]
 backend = { name = "pixi-build-python", version = "*" }
