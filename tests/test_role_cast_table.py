@@ -411,7 +411,7 @@ def test_role_css_colors_each_role() -> None:
     assert ROLE_ROW_COLORS == {
         MeasurementType.SAMPLE: "#ffffff",
         MeasurementType.BACKGROUND: "#fce4ec",
-        MeasurementType.EMPTY_CELL: "#e3f2fd",
+        MeasurementType.EMPTY_CELL: "#e8f5e9",
     }
     for role, css_class in ROLE_ROW_CLASSES.items():
         # !important wins over the theme's row background, including odd-row shading.

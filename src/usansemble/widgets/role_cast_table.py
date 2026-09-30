@@ -11,7 +11,7 @@ removes only the selected runs. The buttons are enabled only while the table
 holds a selection.
 
 Each row is colored by its role: white for sample, light pink for background,
-light blue for empty cell. AG Grid's ``rowClassRules`` give a row one CSS class
+light green for empty cell. AG Grid's ``rowClassRules`` give a row one CSS class
 per role, testing the hidden ``_role`` value rather than the display label, and
 :data:`ROLE_CSS` colors those classes. The Name column is given most of the
 table width, and shows the full name in a tooltip.
@@ -62,7 +62,7 @@ ROLE_ROW_CLASSES = {
 ROLE_ROW_COLORS = {
     MeasurementType.SAMPLE: "#ffffff",
     MeasurementType.BACKGROUND: "#fce4ec",  # light pink
-    MeasurementType.EMPTY_CELL: "#e3f2fd",  # light blue
+    MeasurementType.EMPTY_CELL: "#e8f5e9",  # light green
 }
 # AG Grid draws the selection as a translucent layer over the row (a ``::before``
 # pseudo-element), so the role color shows through it. The theme's layer is too
