@@ -27,6 +27,7 @@ pyoncatng's `OncatLogin` and `IPTSTable`:
 3. Select runs in the table: click selects one run, Ctrl/Cmd+click toggles a run,
    Shift+click selects a range, and double-click selects every run with the same
    title. Ctrl/Cmd+double-click adds that title group to the selection.
+   Runs without a title are greyed out and cannot be selected or fetched.
 4. Click **Clear Selection** to deselect all highlighted runs and start over.
    Like **Fetch Runs**, this button is enabled only while the table has a
    selection. Clearing the selection disables both buttons again.
@@ -68,7 +69,7 @@ each click the selection is cleared, and a status line below the buttons
 reports how many runs were assigned or removed.
 
 Each row is colored by its role: white for sample, light pink for background
-and light blue for empty cell.
+and light green for empty cell.
 
 Exporting the `usansred` JSON configuration is planned for a subsequent
 iteration.

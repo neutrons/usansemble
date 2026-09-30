@@ -136,7 +136,11 @@ async def test_runs_selector_disables_rows_without_titles(user: User) -> None:
     selector = _selector(user)
     options = selector.table._table.options
 
-    selectable = options[":isRowSelectable"]
+    # AG Grid ignores a top-level ``isRowSelectable`` when ``rowSelection`` is an
+    # object, so the predicate must live inside it.
+    assert isinstance(options["rowSelection"], dict)
+    assert ":isRowSelectable" not in options
+    selectable = options["rowSelection"][":isRowSelectable"]
     assert json.dumps(TITLE_COLUMN) in selectable
     assert 'String(value).trim() !== ""' in selectable
 
