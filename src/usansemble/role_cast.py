@@ -48,7 +48,15 @@ class RunAssignment:
 class RoleCast:
     """The role assignments of the fetched runs, keyed by run number.
 
-    Assignments keep the order the runs were given to :meth:`set_runs`.
+    Assignments are ordered by decreasing run number, the order in which the
+    ``IPTSTable`` of ``RunsSelector`` lists the runs, whatever order
+    :meth:`add_runs` receives them in. Runs are added by :meth:`add_runs` and
+    leave only through :meth:`remove`.
+
+    Runs sharing a name belong to one USANS measurement, so they always share a
+    role: :meth:`assign` sets the role of whole name groups, and a newly fetched
+    run takes the role of the runs with its name already in the cast. Names are compared exactly, as the
+    title double-click of ``RunsSelector`` compares titles.
     """
 
     def __init__(self) -> None:
@@ -56,28 +64,69 @@ class RoleCast:
 
     @property
     def assignments(self) -> list[RunAssignment]:
-        """Deep copies of the assignments, in run order."""
+        """Deep copies of the assignments, by decreasing run number."""
         return copy.deepcopy(list(self._assignments.values()))
 
-    def set_runs(self, rows: Sequence[Row]) -> None:
-        """Replace the runs with those in ``rows``, keeping existing assignments.
+    def add_runs(self, rows: Sequence[Row]) -> list[int]:
+        """Add the runs in ``rows`` that are not in the cast yet.
 
-        A run already present keeps its assignment unchanged. A new run is
-        named after its ``Title`` and starts as a sample. A run missing from
-        ``rows`` is dropped. ``int`` makes a run number reported as a string
-        match the same run reported as an integer.
+        A run already present keeps its assignment unchanged, and no run is
+        dropped. A new run is named after its ``Title`` and takes the role of
+        the runs with the same name already in the cast, or starts as a sample
+        if there are none. ``int`` makes a run number reported as a string
+        match the same run reported as an integer, and keeps the ordering
+        numeric.
+
+        Returns
+        -------
+        list of int
+            The run numbers added, by decreasing run number.
         """
-        assignments: dict[int, RunAssignment] = {}
+        # Runs sharing a name share a role, so any run of a group gives it.
+        group_roles = {assignment.name: assignment.role for assignment in self._assignments.values()}
+        assignments = dict(self._assignments)
+        added: list[int] = []
         for row in rows:
             run_number = int(row[ID_COLUMN])
-            existing = self._assignments.get(run_number)
-            if existing is None:
-                existing = RunAssignment(run_number=run_number, name=str(row.get(TITLE_COLUMN) or ""))
-            assignments[run_number] = existing
-        self._assignments = assignments
+            if run_number in assignments:
+                continue
+            name = str(row.get(TITLE_COLUMN) or "")
+            role = group_roles.get(name, MeasurementType.SAMPLE)
+            assignments[run_number] = RunAssignment(run_number=run_number, name=name, role=role)
+            added.append(run_number)
+        self._assignments = dict(sorted(assignments.items(), reverse=True))
+        return sorted(added, reverse=True)
 
-    def assign(self, run_numbers: Iterable[int], role: MeasurementType) -> None:
-        """Give every run in ``run_numbers`` the given role.
+    def remove(self, run_numbers: Iterable[int]) -> list[int]:
+        """Remove the runs in ``run_numbers``, and only those.
+
+        Other runs sharing a name with a removed run stay, with their role.
+
+        Returns
+        -------
+        list of int
+            The run numbers removed, by decreasing run number.
+
+        Raises
+        ------
+        KeyError
+            If a run number is not present. Every run number is looked up
+            before any run is removed, so a failed call removes nothing.
+        """
+        targets = {self._assignments[int(run_number)].run_number for run_number in run_numbers}
+        self._assignments = {n: a for n, a in self._assignments.items() if n not in targets}
+        return sorted(targets, reverse=True)
+
+    def assign(self, run_numbers: Iterable[int], role: MeasurementType) -> list[int]:
+        """Give ``role`` to every run sharing a name with a run in ``run_numbers``.
+
+        Selecting any one run of a measurement therefore assigns the role to the
+        whole measurement.
+
+        Returns
+        -------
+        list of int
+            The run numbers whose role was set, by decreasing run number.
 
         Raises
         ------
@@ -86,12 +135,14 @@ class RoleCast:
             before any role changes, so a failed call leaves all roles as they
             were.
         """
-        targets = [self._assignments[int(run_number)] for run_number in run_numbers]
+        names = {self._assignments[int(run_number)].name for run_number in run_numbers}
+        targets = [assignment for assignment in self._assignments.values() if assignment.name in names]
         for assignment in targets:
             assignment.role = role
+        return [assignment.run_number for assignment in targets]
 
     def as_rows(self) -> list[Row]:
-        """Project the assignments into grid rows, in run order."""
+        """Project the assignments into grid rows, by decreasing run number."""
         return [
             {
                 ID_COLUMN: assignment.run_number,
