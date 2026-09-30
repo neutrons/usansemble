@@ -6,6 +6,8 @@ involved. Rows are fed through ``add_runs`` in the shape ``RunsSelector``
 delivers them.
 """
 
+import asyncio
+
 import pytest
 from nicegui.testing import User
 from pyoncatng.widgets.runtable import RunTable
@@ -317,6 +319,35 @@ async def test_remove_button_click_is_wired(user: User) -> None:
 
     await user.should_see(REMOVED_MESSAGE.format(n=1))
     assert list(_grid_roles(widget)) == [2]
+
+
+async def test_overlapping_remove_clicks_are_ignored(user: User) -> None:
+    await user.open("/roles")
+    widget = _widget(user)
+    widget.add_runs([_row(1), _row(2)])
+    selection_started = asyncio.Event()
+    release_selection = asyncio.Event()
+    selection_calls = 0
+
+    async def _selected_rows():
+        nonlocal selection_calls
+        selection_calls += 1
+        selection_started.set()
+        await release_selection.wait()
+        return [_grid_row(1)]
+
+    widget.table.get_selected_rows = _selected_rows
+    first_remove = asyncio.create_task(widget._on_remove())
+    await selection_started.wait()
+
+    second_remove = asyncio.create_task(widget._on_remove())
+    await asyncio.sleep(0)
+    release_selection.set()
+    await asyncio.gather(first_remove, second_remove)
+
+    assert selection_calls == 1
+    assert list(_grid_roles(widget)) == [2]
+    await user.should_see(REMOVED_MESSAGE.format(n=1))
 
 
 async def test_remove_without_a_selection_removes_nothing(user: User) -> None:

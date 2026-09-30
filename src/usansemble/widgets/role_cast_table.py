@@ -24,6 +24,7 @@ buttons are disabled again. Runs are listed by decreasing run number, as in the 
 table.
 """
 
+import asyncio
 import functools
 import json
 from collections.abc import Callable, Sequence
@@ -126,6 +127,7 @@ class RoleCastTable(ui.column):
         self._table_height = table_height
         self._cast = RoleCast()
         self._callbacks: list[Callable[[list[RunAssignment]], None]] = []
+        self._selection_action_lock = asyncio.Lock()
         self._build_ui()
 
     # -- public integration surface ----------------------------------------
@@ -274,24 +276,30 @@ class RoleCastTable(ui.column):
 
     async def _on_assign(self, role: MeasurementType, _event: Any = None) -> None:
         """Give ``role`` to every run sharing a name with a selected run."""
-        rows = await self._table.get_selected_rows()
-        if not rows:
-            # Reaching here means the enabled state was stale, so correct it.
-            self._set_selection_buttons_enabled(False)
+        if self._selection_action_lock.locked():
             return
-        assigned = self._cast.assign((row[ID_COLUMN] for row in rows), role)
-        self._refresh()
-        self._set_status(ASSIGNED_MESSAGE.format(n=len(assigned), role=ROLE_LABELS[role]))
-        self._notify()
+        async with self._selection_action_lock:
+            rows = await self._table.get_selected_rows()
+            if not rows:
+                # Reaching here means the enabled state was stale, so correct it.
+                self._set_selection_buttons_enabled(False)
+                return
+            assigned = self._cast.assign((row[ID_COLUMN] for row in rows), role)
+            self._refresh()
+            self._set_status(ASSIGNED_MESSAGE.format(n=len(assigned), role=ROLE_LABELS[role]))
+            self._notify()
 
     async def _on_remove(self, _event: Any = None) -> None:
         """Remove the selected runs, and only those, and redraw the table."""
-        rows = await self._table.get_selected_rows()
-        if not rows:
-            # Reaching here means the enabled state was stale, so correct it.
-            self._set_selection_buttons_enabled(False)
+        if self._selection_action_lock.locked():
             return
-        removed = self._cast.remove(row[ID_COLUMN] for row in rows)
-        self._refresh()
-        self._set_status(REMOVED_MESSAGE.format(n=len(removed)))
-        self._notify()
+        async with self._selection_action_lock:
+            rows = await self._table.get_selected_rows()
+            if not rows:
+                # Reaching here means the enabled state was stale, so correct it.
+                self._set_selection_buttons_enabled(False)
+                return
+            removed = self._cast.remove(row[ID_COLUMN] for row in rows)
+            self._refresh()
+            self._set_status(REMOVED_MESSAGE.format(n=len(removed)))
+            self._notify()

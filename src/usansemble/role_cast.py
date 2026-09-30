@@ -45,6 +45,17 @@ class RunAssignment:
     transmission: float | None = None
 
 
+def _row_name(row: Row) -> str:
+    """The validated measurement name carried by a fetched run row."""
+    title = row[TITLE_COLUMN]
+    if title is None:
+        raise ValueError(f"run {row[ID_COLUMN]!r} has no {TITLE_COLUMN}")
+    name = str(title)
+    if not name.strip():
+        raise ValueError(f"run {row[ID_COLUMN]!r} has no {TITLE_COLUMN}")
+    return name
+
+
 class RoleCast:
     """The role assignments of the fetched runs, keyed by run number.
 
@@ -90,7 +101,7 @@ class RoleCast:
             run_number = int(row[ID_COLUMN])
             if run_number in assignments:
                 continue
-            name = str(row.get(TITLE_COLUMN) or "")
+            name = _row_name(row)
             role = group_roles.get(name, MeasurementType.SAMPLE)
             assignments[run_number] = RunAssignment(run_number=run_number, name=name, role=role)
             added.append(run_number)

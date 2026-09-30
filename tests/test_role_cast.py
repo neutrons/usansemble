@@ -58,10 +58,11 @@ def test_add_runs_seeds_samples_from_titles() -> None:
     ]
 
 
-def test_add_runs_without_a_title_gives_an_empty_name() -> None:
+@pytest.mark.parametrize("row", [{"ID": 1}, {"ID": 2, "Title": None}, {"ID": 3, "Title": ""}, {"ID": 4, "Title": " "}])
+def test_add_runs_without_a_title_raises(row: dict) -> None:
     cast = RoleCast()
-    cast.add_runs([{"ID": 1}, {"ID": 2, "Title": None}])
-    assert [assignment.name for assignment in cast.assignments] == ["", ""]
+    with pytest.raises((KeyError, ValueError)):
+        cast.add_runs([row])
 
 
 def test_add_runs_orders_by_decreasing_run_number() -> None:
