@@ -10,14 +10,22 @@ run, since the runs of one USANS measurement share a name. **Remove Runs**
 removes only the selected runs. The buttons are enabled only while the table
 holds a selection.
 
+Each row is colored by its role: white for sample, light pink for background,
+light blue for empty cell. AG Grid's ``rowClassRules`` give a row one CSS class
+per role, testing the hidden ``_role`` value rather than the display label, and
+:data:`ROLE_CSS` colors those classes. The Name column is given most of the
+table width, and shows the full name in a tooltip.
+
 A :class:`~usansemble.role_cast.RoleCast` is the single source of truth: the grid
-is a view of it, redrawn from :meth:`RoleCast.as_rows` after every change. A
-redraw rebuilds the grid, which drops the selection and disables the buttons
-again. Runs are listed by decreasing run number, as in the ``RunsSelector``
+is a view of it, refreshed from :meth:`RoleCast.as_rows` after every change. A
+refresh replaces only the grid's rows, so column widths, column order and the
+scroll position set by the user are kept; it drops the selection, and the
+buttons are disabled again. Runs are listed by decreasing run number, as in the ``RunsSelector``
 table.
 """
 
 import functools
+import json
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -29,6 +37,7 @@ from usansemble.role_cast import (
     ID_COLUMN,
     NAME_COLUMN,
     ROLE_COLUMN,
+    ROLE_VALUE_KEY,
     THICKNESS_COLUMN,
     TRANSMISSION_COLUMN,
     RoleCast,
@@ -36,6 +45,55 @@ from usansemble.role_cast import (
 )
 
 COLUMNS = (ID_COLUMN, NAME_COLUMN, ROLE_COLUMN, THICKNESS_COLUMN, TRANSMISSION_COLUMN)
+
+# Relative column widths. Names are long (a USANS title), so the Name column
+# takes most of the width; every other column gets a weight of 1.
+COLUMN_FLEX = {NAME_COLUMN: 3}
+
+# CSS classes: one on every row of this table, so the styles below cannot reach
+# another grid, and one per role, set by ``rowClassRules``.
+ROW_CLASS = "usansemble-role-row"
+ROLE_ROW_CLASSES = {
+    MeasurementType.SAMPLE: "usansemble-role-sample",
+    MeasurementType.BACKGROUND: "usansemble-role-background",
+    MeasurementType.EMPTY_CELL: "usansemble-role-empty-cell",
+}
+ROLE_ROW_COLORS = {
+    MeasurementType.SAMPLE: "#ffffff",
+    MeasurementType.BACKGROUND: "#fce4ec",  # light pink
+    MeasurementType.EMPTY_CELL: "#e3f2fd",  # light blue
+}
+# AG Grid draws the selection as a translucent layer over the row (a ``::before``
+# pseudo-element), so the role color shows through it. The theme's layer is too
+# faint over a colored row, so a stronger one is used on this table's rows.
+SELECTED_ROW_COLOR = "rgba(25, 118, 210, 0.3)"
+
+
+def build_row_class_rules() -> dict[str, str]:
+    """Build the AG Grid ``rowClassRules`` giving each row its role class.
+
+    NiceGUI turns an options key prefixed with ":" into a real JS function,
+    here the rule deciding whether a row gets the class named by the key.
+    """
+    return {
+        f":{css_class}": f"(params) => params.data?.{ROLE_VALUE_KEY} === {json.dumps(role.value)}"
+        for role, css_class in ROLE_ROW_CLASSES.items()
+    }
+
+
+# Sample rows are set to white explicitly, rather than left to the theme, which
+# may shade alternate rows; ``!important`` makes the role colors win over the
+# theme's row background.
+ROLE_CSS = "\n".join(
+    [
+        f".ag-row.{ROW_CLASS}.{ROLE_ROW_CLASSES[role]} {{ background-color: {color} !important; }}"
+        for role, color in ROLE_ROW_COLORS.items()
+    ]
+    + [
+        f".ag-row.{ROW_CLASS}.ag-row-selected::before {{ "
+        f"background-color: {SELECTED_ROW_COLOR} !important; background-image: none !important; }}"
+    ]
+)
 
 # One button per role, in the order they are laid out.
 SAMPLE_BUTTON_LABEL = "Set as Sample"
@@ -121,6 +179,7 @@ class RoleCastTable(ui.column):
                 .classes("w-full")
                 .style(f"height: {self._table_height}")
             )
+            self._configure_grid()
             with ui.row().classes("items-center") as self._buttons_row:
                 self._role_buttons = {
                     role: ui.button(label, on_click=functools.partial(self._on_assign, role))
@@ -131,20 +190,57 @@ class RoleCastTable(ui.column):
         self._set_status("")
         self._set_selection_buttons_enabled(False)
         self._table.on_selection_change(self._on_selection_change)
-        # Every redraw goes through NiceGUI's aggrid update, which destroys and
-        # recreates the grid; the selection is dropped without a
-        # selectionChanged event, so the buttons are reset on gridReady instead.
+        # NiceGUI rebuilds the grid when it is first shown, when the page is
+        # reloaded, and on any aggrid update(); a rebuild drops the selection
+        # without a selectionChanged event, so the buttons are reset on
+        # gridReady too.
         self._table.on("gridReady", self._on_table_rebuilt)
+
+    def _configure_grid(self) -> None:
+        """Set the column widths and the role row colors on the grid options.
+
+        :meth:`_refresh` replaces only ``rowData``, so these options stay in
+        place across every refresh.
+        """
+        ui.add_css(ROLE_CSS)
+        options = self._table.options
+        # NiceGUI fits the columns to the grid width in equal shares unless a
+        # column uses flex, and that strategy overrides flex; drop it so the
+        # flex weights apply.
+        options.pop("autoSizeStrategy", None)
+        for column in options["columnDefs"]:
+            column["flex"] = COLUMN_FLEX.get(column["field"], 1)
+            if column["field"] == NAME_COLUMN:
+                column["tooltipField"] = NAME_COLUMN
+        options["rowClass"] = ROW_CLASS
+        # Identifying rows by run number lets AG Grid update the changed rows
+        # in place when the row data is replaced, keeping the scroll position.
+        options[":getRowId"] = f"(params) => String(params.data[{json.dumps(ID_COLUMN)}])"
+        options["rowClassRules"] = build_row_class_rules()
+        self._table.update()
 
     # -- state --------------------------------------------------------------
 
     def _refresh(self) -> None:
-        """Redraw the grid from the model.
+        """Show the model's rows in the grid without rebuilding it.
 
-        The redraw drops the selection, so the buttons are disabled here too
-        rather than only when the browser reports ``gridReady``.
+        ``RunTable.set_rows`` goes through NiceGUI's aggrid ``update()``, which
+        destroys and recreates the grid, discarding the column widths, column
+        order and scroll position the user set. Instead, the rows are replaced
+        in the live grid through the AG Grid API; with ``getRowId``, AG Grid
+        updates only the rows that changed. ``options["rowData"]`` is
+        kept in step so a client connecting later (a page reload) builds the
+        grid with the current rows; the options are observed, so the change is
+        made with updates suspended, or it would trigger ``update()`` itself.
+
+        An in-place update keeps the selection, so it is cleared explicitly:
+        after any button, no run is selected and the buttons are disabled.
         """
-        self._table.set_rows(self._cast.as_rows())
+        rows = self._cast.as_rows()
+        with self._table.props.suspend_updates():
+            self._table.options["rowData"] = rows
+        self._table.run_grid_method("setGridOption", "rowData", rows)
+        self._table.run_grid_method("deselectAll")
         self._set_selection_buttons_enabled(False)
 
     def _notify(self) -> None:

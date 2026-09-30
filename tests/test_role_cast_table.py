@@ -18,6 +18,10 @@ from usansemble.widgets.role_cast_table import (
     EMPTY_CELL_BUTTON_LABEL,
     REMOVE_BUTTON_LABEL,
     REMOVED_MESSAGE,
+    ROLE_CSS,
+    ROLE_ROW_CLASSES,
+    ROLE_ROW_COLORS,
+    ROW_CLASS,
     SAMPLE_BUTTON_LABEL,
     RoleCastTable,
 )
@@ -339,3 +343,102 @@ async def test_remove_notifies_the_callbacks(user: User) -> None:
     await widget._on_remove()
 
     assert [[a.run_number for a in payload] for payload in seen] == [[1]]
+
+
+async def test_rows_get_one_class_per_role(user: User) -> None:
+    await user.open("/roles")
+    widget = _widget(user)
+    options = widget.table.options
+
+    # Every row carries the table's own class, which scopes the role CSS.
+    assert options["rowClass"] == ROW_CLASS
+    # The ":" prefix makes NiceGUI compile each rule into a JS function; each rule
+    # tests the hidden raw value, not the display label.
+    assert options["rowClassRules"] == {
+        ":usansemble-role-sample": '(params) => params.data?._role === "sample"',
+        ":usansemble-role-background": '(params) => params.data?._role === "background"',
+        ":usansemble-role-empty-cell": '(params) => params.data?._role === "empty_cell"',
+    }
+    assert set(ROLE_ROW_CLASSES) == set(MeasurementType)
+
+
+async def test_row_class_rules_survive_a_redraw(user: User) -> None:
+    await user.open("/roles")
+    widget = _widget(user)
+    rules = dict(widget.table.options["rowClassRules"])
+    widget.add_runs([_row(1)])
+    _stub_selection(widget, [_grid_row(1)])
+
+    await widget._on_assign(MeasurementType.BACKGROUND)
+
+    assert widget.table.options["rowClassRules"] == rules
+    assert widget.table.options["rowClass"] == ROW_CLASS
+    assert widget.table.options["rowData"][0]["_role"] == "background"
+
+
+def test_role_css_colors_each_role() -> None:
+    assert ROLE_ROW_COLORS == {
+        MeasurementType.SAMPLE: "#ffffff",
+        MeasurementType.BACKGROUND: "#fce4ec",
+        MeasurementType.EMPTY_CELL: "#e3f2fd",
+    }
+    for role, css_class in ROLE_ROW_CLASSES.items():
+        # !important wins over the theme's row background, including odd-row shading.
+        assert (
+            f".ag-row.{ROW_CLASS}.{css_class} {{ background-color: {ROLE_ROW_COLORS[role]} !important; }}" in ROLE_CSS
+        )
+
+
+def test_role_css_keeps_selected_rows_visible() -> None:
+    # The selection layer is drawn over the role color, scoped to this table.
+    rule = next(line for line in ROLE_CSS.splitlines() if "ag-row-selected" in line)
+    assert rule.startswith(f".ag-row.{ROW_CLASS}.ag-row-selected::before {{")
+    assert "background-color: rgba(" in rule
+    assert "!important" in rule
+
+
+async def test_name_column_takes_most_of_the_width(user: User) -> None:
+    await user.open("/roles")
+    widget = _widget(user)
+    options = widget.table.options
+
+    # NiceGUI's fit-to-width strategy overrides flex, so it must be gone.
+    assert "autoSizeStrategy" not in options
+    flex = {column["field"]: column["flex"] for column in options["columnDefs"]}
+    assert flex == {"ID": 1, "Name": 3, "Role": 1, "Thickness": 1, "Transmission": 1}
+    name = next(column for column in options["columnDefs"] if column["field"] == "Name")
+    assert name["tooltipField"] == "Name"
+
+
+@pytest.mark.parametrize("action", ["assign", "remove", "add_runs"])
+async def test_refresh_replaces_rows_without_rebuilding_the_grid(user: User, monkeypatch, action: str) -> None:
+    await user.open("/roles")
+    widget = _widget(user)
+    widget.add_runs([_row(1), _row(2)])
+    _stub_selection(widget, [_grid_row(1)])
+    updates: list = []
+    grid_calls: list = []
+    # update() rebuilds the grid in the browser, discarding the column widths,
+    # column order and scroll position the user set.
+    monkeypatch.setattr(widget.table, "update", lambda: updates.append(True))
+    monkeypatch.setattr(widget.table, "run_grid_method", lambda name, *args: grid_calls.append((name, *args)))
+
+    if action == "assign":
+        await widget._on_assign(MeasurementType.BACKGROUND)
+    elif action == "remove":
+        await widget._on_remove()
+    else:
+        widget.add_runs([_row(3)])
+
+    assert updates == []
+    assert grid_calls == [("setGridOption", "rowData", widget.table.options["rowData"]), ("deselectAll",)]
+    assert widget.table.options["rowData"] == widget.cast.as_rows()
+
+
+async def test_rows_are_identified_by_run_number(user: User) -> None:
+    await user.open("/roles")
+    widget = _widget(user)
+
+    # With row IDs, replacing the row data updates rows in place and keeps the
+    # scroll position.
+    assert widget.table.options[":getRowId"] == '(params) => String(params.data["ID"])'
