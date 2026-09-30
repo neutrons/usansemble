@@ -16,6 +16,8 @@ from pyoncatng.widgets.login import OncatLogin
 
 from usansemble.widgets.runs_selector import (
     CLEAR_BUTTON_LABEL,
+    DISABLED_TITLE_ROW_CLASS,
+    EMPTY_TITLE_ROW_CSS,
     FETCH_BUTTON_LABEL,
     FETCHED_MESSAGE,
     ID_COLUMN,
@@ -122,10 +124,26 @@ async def test_runs_selector_installs_title_double_click_handler(user: User) -> 
     assert "ctrlKey" in handler
     assert "metaKey" in handler
     # Invalid cell events must leave the existing selection unchanged.
-    assert "if (wanted == null) return;" in handler
+    assert 'String(wanted).trim() === ""' in handler
     # Replacing clears first; both branches end by selecting the matching rows.
     assert "deselectAll" in handler
     assert "setNodesSelected" in handler
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_runs_selector_disables_rows_without_titles(user: User) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+    options = selector.table._table.options
+
+    selectable = options[":isRowSelectable"]
+    assert json.dumps(TITLE_COLUMN) in selectable
+    assert 'String(value).trim() !== ""' in selectable
+
+    row_class_rule = options["rowClassRules"][f":{DISABLED_TITLE_ROW_CLASS}"]
+    assert json.dumps(TITLE_COLUMN) in row_class_rule
+    assert row_class_rule.startswith("(params) => !")
+    assert DISABLED_TITLE_ROW_CLASS in EMPTY_TITLE_ROW_CSS
 
 
 @pytest.mark.usefixtures("fake_agent")
@@ -215,9 +233,16 @@ async def test_fetch_button_follows_the_selection(user: User) -> None:
     assert selector._fetch_button.enabled is False
     assert selector._clear_button.enabled is False
 
+    untitled = _row(33222)
+    untitled[TITLE_COLUMN] = " "
+    _stub_selection(selector, [untitled])
+    await selector._on_selection_change()
+    assert selector._fetch_button.enabled is False
+    assert selector._clear_button.enabled is False
+
 
 @pytest.mark.usefixtures("fake_agent")
-async def test_fetch_runs_sorts_by_increasing_id(user: User) -> None:
+async def test_fetch_runs_sorts_by_decreasing_id(user: User) -> None:
     await user.open("/runs")
     selector = _selector(user)
     # AG Grid returns the rows in the order the selection was built, which is
@@ -226,7 +251,22 @@ async def test_fetch_runs_sorts_by_increasing_id(user: User) -> None:
 
     await selector._on_fetch()
 
-    assert [row[ID_COLUMN] for row in selector.fetched_runs] == [33219, 33220, 33221]
+    assert [row[ID_COLUMN] for row in selector.fetched_runs] == [33221, 33220, 33219]
+
+
+@pytest.mark.usefixtures("fake_agent")
+async def test_fetch_runs_ignores_rows_without_titles(user: User) -> None:
+    await user.open("/runs")
+    selector = _selector(user)
+    untitled = _row(33222)
+    untitled[TITLE_COLUMN] = ""
+    missing_title = _row(33220)
+    del missing_title[TITLE_COLUMN]
+    _stub_selection(selector, [untitled, _row(33221), missing_title])
+
+    await selector._on_fetch()
+
+    assert [row[ID_COLUMN] for row in selector.fetched_runs] == [33221]
 
 
 @pytest.mark.usefixtures("fake_agent")
@@ -283,11 +323,11 @@ async def test_fetch_runs_notifies_and_reports(user: User) -> None:
     selector = _selector(user)
     seen: list[list[dict]] = []
     selector.on_runs_fetched(seen.append)
-    _stub_selection(selector, [_row(33221), _row(33220)])
+    _stub_selection(selector, [_row(33220), _row(33221)])
 
     await selector._on_fetch()
 
-    assert [row[ID_COLUMN] for row in seen[0]] == [33220, 33221]
+    assert [row[ID_COLUMN] for row in seen[0]] == [33221, 33220]
     await user.should_see(FETCHED_MESSAGE.format(n=2))
 
 

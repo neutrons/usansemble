@@ -32,11 +32,43 @@ pyoncatng's `OncatLogin` and `IPTSTable`:
    selection. Clearing the selection disables both buttons again.
 5. Click **Fetch Runs** to capture the highlighted runs. The button stays
    disabled until the table has a selection, and the captured runs are ordered
-   by increasing run number regardless of the order they were selected in.
+   by decreasing run number, as the table lists them, regardless of the order
+   they were selected in.
    Loading another IPTS clears the selection and disables the button again;
    the runs fetched before it are kept. Each click replaces the previous
    capture, so the widget holds exactly the runs highlighted at the last click.
+   The role table below adds each capture to the runs it already holds; see
+   the next section.
 
-Assigning runs to roles (sample / background / empty cell / empty beam) and
-exporting the `usansred` JSON configuration are planned for subsequent
-iterations.
+## The RoleCastTable widget
+
+Below the `RunsSelector`, the landing page mounts a `RoleCastTable`, where each
+fetched run is assigned the role it plays in the reduction: sample, background
+or empty cell. The table lists each run's ID, Name (its title), Role, Thickness
+and Transmission, by decreasing run number. Thickness and Transmission are
+empty for now.
+
+1. Click **Fetch Runs** in the `RunsSelector` to add the highlighted runs to the
+   role table. Each fetch adds runs; runs already in the table stay, with their
+   role. A new run starts as a sample, unless runs with the same Name are
+   already in the table, in which case it takes their role.
+2. Select runs in the role table: click selects one run, Ctrl/Cmd+click toggles
+   a run, and Shift+click selects a range.
+3. Click **Set as Background**, **Set as Empty Cell** or **Set as Sample** to
+   assign that role. The runs of one measurement share a Name, so a button
+   assigns the role to every run with the same Name as a selected run. Runs
+   with the same Name therefore always have the same role. Names are compared
+   exactly, including case and spaces.
+4. Click **Remove Runs** to take the selected runs out of the table. Only the
+   selected runs are removed; other runs with the same Name stay, with their
+   role.
+
+The four buttons are enabled only while the role table has a selection. After
+each click the selection is cleared, and a status line below the buttons
+reports how many runs were assigned or removed.
+
+Each row is colored by its role: white for sample, light pink for background
+and light blue for empty cell.
+
+Exporting the `usansred` JSON configuration is planned for a subsequent
+iteration.

@@ -16,12 +16,14 @@ measurement share a title -- see :data:`_SELECT_BY_TITLE_JS`.
 
 A **Fetch Runs** button below the table captures the current selection. AG Grid
 returns selected rows in the order the selection was built, so the captured rows
-are sorted by increasing run number before being stored. Consumers read them
+are sorted by decreasing run number before being stored, the order in which
+ONCat lists the runs and the table shows them. Consumers read them
 through :attr:`RunsSelector.fetched_runs` or subscribe with
-:meth:`RunsSelector.on_runs_fetched`. A **Clear Selection** button beside it
-deselects all highlighted rows. Both buttons are enabled only while the table
-holds a selection; clearing the selection or loading another IPTS disables them
-again.
+:meth:`RunsSelector.on_runs_fetched`. Rows without a title are shown as disabled
+and cannot be selected or fetched. A **Clear Selection** button beside the fetch
+button deselects all highlighted rows. Both buttons are enabled only while the
+table holds a selection; clearing the selection or loading another IPTS disables
+them again.
 """
 
 import copy
@@ -59,7 +61,7 @@ _SELECT_BY_TITLE_JS = f"""
 (params) => {{
     const field = {json.dumps(TITLE_COLUMN)};
     const wanted = params.data ? params.data[field] : undefined;
-    if (wanted == null) return;
+    if (wanted == null || String(wanted).trim() === "") return;
     const additive = !!(params.event && (params.event.ctrlKey || params.event.metaKey));
     const nodes = [];
     params.api.forEachNode((node) => {{
@@ -67,6 +69,19 @@ _SELECT_BY_TITLE_JS = f"""
     }});
     if (!additive) params.api.deselectAll();
     params.api.setNodesSelected({{ nodes: nodes, newValue: true, source: "api" }});
+}}
+"""
+
+DISABLED_TITLE_ROW_CLASS = "usansemble-empty-title-row"
+EMPTY_TITLE_ROW_CSS = (
+    f".ag-row.{DISABLED_TITLE_ROW_CLASS} {{ "
+    "background-color: #f3f4f6 !important; color: #9ca3af !important; "
+    "cursor: not-allowed; }}"
+)
+_HAS_TITLE_JS = f"""
+(data) => {{
+    const value = data ? data[{json.dumps(TITLE_COLUMN)}] : undefined;
+    return value != null && String(value).trim() !== "";
 }}
 """
 
@@ -98,6 +113,12 @@ def _copy_rows(rows: List[Row]) -> List[Row]:
     draws around its own rows, in depth rather than one level.
     """
     return copy.deepcopy(list(rows))
+
+
+def _row_has_title(row: Row) -> bool:
+    """Whether ``row`` has a title that can identify a measurement."""
+    title = row.get(TITLE_COLUMN)
+    return title is not None and str(title).strip() != ""
 
 
 class RunsSelector(ui.column):
@@ -168,7 +189,7 @@ class RunsSelector(ui.column):
 
     @property
     def fetched_runs(self) -> List[Row]:
-        """The runs captured by the last **Fetch Runs**, by increasing run number.
+        """The runs captured by the last **Fetch Runs**, by decreasing run number.
 
         Each **Fetch Runs** click replaces this with whatever is highlighted at
         the time; nothing else does. Loading another IPTS or signing out leaves
@@ -220,20 +241,24 @@ class RunsSelector(ui.column):
                 .classes("w-full")
                 .style(f"height: {self._table_height}")
             )
-            self._enable_title_double_click()
+            self._configure_grid()
             self._add_selection_help()
             self._add_fetch_button()
 
-    def _enable_title_double_click(self) -> None:
-        """Make a double-click select every row sharing the clicked row's title.
+    def _configure_grid(self) -> None:
+        """Configure title-aware selection behavior on the embedded grid.
 
         The gesture is a property of the AG Grid options, so it can be installed
         on the ``IPTSTable`` instance without subclassing it. ``IPTSTable`` keeps
         the grid private, hence the reach into ``_table``; should pyoncatng grow a
         public hook for this, only this method needs to change.
         """
+        ui.add_css(EMPTY_TITLE_ROW_CSS)
         grid = self._table._table
         grid.options[":onCellDoubleClicked"] = _SELECT_BY_TITLE_JS
+        grid.options[":isRowSelectable"] = f"(node) => ({_HAS_TITLE_JS})(node.data)"
+        grid.options.setdefault("rowClassRules", {})
+        grid.options["rowClassRules"][f":{DISABLED_TITLE_ROW_CLASS}"] = f"(params) => !({_HAS_TITLE_JS})(params.data)"
         # Push the new option in case the widget is built after the client connected.
         grid.update()
 
@@ -289,7 +314,7 @@ class RunsSelector(ui.column):
     async def _on_selection_change(self, _event: Any = None) -> None:
         """Enable the selection buttons only while the table has a selection."""
         rows = await self._table.selected_rows()
-        self._set_selection_buttons_enabled(bool(rows))
+        self._set_selection_buttons_enabled(any(_row_has_title(row) for row in rows))
 
     def _on_table_rebuilt(self, _event: Any = None) -> None:
         """Disable the selection buttons whenever the grid is rebuilt.
@@ -307,22 +332,22 @@ class RunsSelector(ui.column):
         self._set_selection_buttons_enabled(False)
 
     async def _on_fetch(self, _event: Any = None) -> None:
-        """Capture the selected runs, ordered by increasing run number.
+        """Capture the selected runs, ordered by decreasing run number.
 
         ``selected_rows()`` reaches AG Grid's ``getSelectedRows``, which returns
         the rows in the order the selection was built (Ctrl+click order, or the
         order the title double-click handler selected them), so the rows are
-        sorted here. ``int`` keeps the ordering numeric should ONCat ever report
-        the run number as a string.
+        sorted here into the order in which ONCat lists them. ``int`` keeps the
+        ordering numeric should ONCat ever report the run number as a string.
         """
-        rows = await self._table.selected_rows()
+        rows = [row for row in await self._table.selected_rows() if _row_has_title(row)]
         if not rows:
             # Reaching here means the enabled state was stale, so correct it and
             # report the reason. Any previously fetched runs are left intact.
             self._set_selection_buttons_enabled(False)
             self._set_fetch_status(NO_SELECTION_MESSAGE)
             return
-        self._fetched_runs = sorted(_copy_rows(rows), key=lambda row: int(row[ID_COLUMN]))
+        self._fetched_runs = sorted(_copy_rows(rows), key=lambda row: int(row[ID_COLUMN]), reverse=True)
         self._set_fetch_status(FETCHED_MESSAGE.format(n=len(self._fetched_runs)))
         for callback in self._fetch_callbacks:
             callback(self.fetched_runs)

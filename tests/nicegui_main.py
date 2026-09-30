@@ -9,6 +9,7 @@ opening the page.
 
 from nicegui import ui
 
+from usansemble.widgets.role_cast_table import RoleCastTable
 from usansemble.widgets.runs_selector import RunsSelector
 
 
@@ -17,6 +18,12 @@ def runs_page() -> None:
     # Explicit client_id avoids depending on the config-default fallback; the
     # fake_agent fixture supplies the agent behind the login card.
     RunsSelector(client_id="0123456489", facility="SNS", instrument="USANS")
+
+
+@ui.page("/roles")
+def roles_page() -> None:
+    # The role table needs no ONCat agent; tests feed it rows through add_runs.
+    RoleCastTable()
 
 
 if __name__ in {"__main__", "__mp_main__"}:
