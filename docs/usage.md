@@ -68,7 +68,7 @@ The four buttons are enabled only while the role table has a selection. After
 each click the selection is cleared, and a status line below the buttons
 reports how many runs were assigned or removed.
 
-Each row is colored by its role: white for sample, light pink for background
+Each row is colored by its role: white for sample, pale amber for background
 and light green for empty cell.
 
 Exporting the `usansred` JSON configuration is planned for a subsequent
