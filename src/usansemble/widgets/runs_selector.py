@@ -256,7 +256,9 @@ class RunsSelector(ui.column):
         ui.add_css(EMPTY_TITLE_ROW_CSS)
         grid = self._table._table
         grid.options[":onCellDoubleClicked"] = _SELECT_BY_TITLE_JS
-        grid.options[":isRowSelectable"] = f"(node) => ({_HAS_TITLE_JS})(node.data)"
+        # ``RunTable`` configures ``rowSelection`` as an object, and AG Grid then
+        # reads the predicate from that object, ignoring the top-level option.
+        grid.options["rowSelection"][":isRowSelectable"] = f"(node) => ({_HAS_TITLE_JS})(node.data)"
         grid.options.setdefault("rowClassRules", {})
         grid.options["rowClassRules"][f":{DISABLED_TITLE_ROW_CLASS}"] = f"(params) => !({_HAS_TITLE_JS})(params.data)"
         # Push the new option in case the widget is built after the client connected.
